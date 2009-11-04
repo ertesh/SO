@@ -1,0 +1,602 @@
+Laboratorium 5
+==============
+Sygnaly POSIX oraz Unix
+-----------------------
+Lektura podstawowa:
+          * man sigaction, sigsetops, siginterrupt
+          * Troan, Johnson "Oprogramowanie uzytkowe w systemie Linux"
+          rozdz. 13
+          * Vahalia "Jadro systemu UNIX", rozdz 4
+Lektura uzpelniajaca:
+          * man signal, kill, raise, alarm, pause    
+          * Rochkind, rozdz. 8
+          * Stevens, rozdz. 2.4
+
+1. Kompilacja: wywolaj program `make'
+2. Uruchamianie programow
+3. Pliki (sygnaly POSIX - katalog posix):
+
+   err.c, err.h
+        Obsluga bledow.
+
+   signals.c
+	Program wypisuje informacje o wszystkich sygnalach i probuje zmienic
+	ich obsluge; jesli taka zmiana sie nie powiodla, uzytkownik jest o tym 
+	informowany.  Nastepnie uzytkownik moze wyslac do tego procesu pewne 
+	sygnaly i obejrzec reakcje programu na nie.  Funkcja `psignal' wypisuje
+	stanadardowe komunikaty o sygnalach.  Program konczy sie po otrzymaniu
+	znaku konca linii.
+
+   cleanup.c
+	Program ilustruje sposob pisania funkcji obslugi sygnalow, ktore
+	wykonuja rowniez standardowa obsluge.  W momencie pojawienia sie
+	SIGSEGV sygnaly SIGINT i SIGQUIT zostaja zablokowane.
+	Potem nastepuja porzadki, przywrocenie standardowej obslugi SIGSEGV
+	(czyli zrzut obrazu pamieci --- w katalogu roboczym procesu powstaje 
+	plik core, ktory zawiera stan rejestrow i pamieci procesu w chwili jego
+	zakonczenia, ktory mozna nastepnie przeanalizowac za pomoca specjalnych
+	narzedzi), "reczne" odblokowanie tego sygnalu i
+	(na czas obslugi danego sygnalu ten sygnal jest zablokowany) i ponowne
+	wyslanie tego sygnalu do siebie.
+	W trakcie obslugi SIGSEGV mozesz sprawdzic czy rzeczywiscie inne
+	sygnaly sa zablokowane, potem nacisnij enter.  
+	Przed nacisnieciem klawisza enter mozesz wyslac SIGSEGV do tego 
+	procesu, aby sprawdzic, ze zostal on rowniez zablokowany.  
+	UWAGA:
+	Na tych komputerach zrzucanie pamieci jest domyslnie zablokowane.
+	Aby nastapil zrzut pamieci nalezy wydac polecenie `ulimit -c 4096'.
+
+   ctrl-c.c
+	Program ilustruje fakt, ze sygnaly POSIXowe moga zabezpieczac proces
+	trwale przed jakims sygnalem; po wychwyceniu sygnalu nie trzeba
+	ponownie ustanawiac dla niego obslugi.  Potem SIGINT (^C) jest 
+	blokowany do czasu wcisniecia enter.  Nastepuje sprawdzenie czy
+	SIGINT wystapil i jego odblokowanie.  Po odblokowaniu zwalniane
+	sa oczekujace sygnaly (jesli nastapily), ale tylko po jednym
+	egzemplarzu kazdego - wielokrotne ^C dziala tak samo jak 
+	jednokrotne.  W podobny sposob dziala zablokowanie sygnalu na czas 
+	obslugi innego sygnalu.
+
+	Zbadaj co sie stanie gdy dodasz flage SA_RESETHAND.
+
+   child.c
+	Pokazuje jak niektore interpretatory polecen moga w trakcie czytania 
+	danych z terminala informowac o zakonczeniu procesu potomnego.  Dzieki
+	funkcji siginterrupt ustalamy, ze SIGCHLD ma nie przerywac dzialania 
+	funkcji systemowych.  I po obsluzeniu sygnalu (po 2 sekundach) 
+	nastepuje powrot do wykonywania funkcji read.
+
+4. Pliki (sygnaly Unix - katalog unix):
+
+   takeover.c
+        Program sluzy do testowania semantyki signal() - czy jest zgodna z
+        System V, czy z BSD.
+
+        Program przejmuje obsluge sygnalu SIGINT (Ctrl-C).  Jesli semantyka
+        signal() jest zgodna z Systemem V, to pierwsze nacisniecie Ctrl-C
+        spowoduje przechwycenie sygnalu, natomiast drugie - zakonczenie
+        procesu. Jesli domyslna semantyka jest BSD, to sygnal jest
+        przechwytywany trwale, a program mozna zakonczyc przez Ctrl-\. W tym
+        przypadku nalezy dolaczyc plik systemv.h (zob. opis
+        wewnatrz pliku). Semantyka BSD jest domyslna m.in. w wersji
+        plikow naglowkowych dostarczanych z Redhat 5.0.
+
+   sigproc.c
+        Tworzy wlasna grupe procesow, a potem 10 potomkow.  Z tych potomkow 
+        pieciu (o nieparzystych numerach) tworzy wlasne grupy.  Po pieciu 
+        sekundach proces macierzyty wysyla sygnal INT do wszystkich czlonkow
+        swojej grupy.  Zabici zostaja Ci, ktorzy nie utworzyli wlasnych grup.
+        Pozostali po 15 sekundach koncza prace.  Natychmiast po zakonczeniu
+        programu `sigproc' uruchom program `ps' aby zobaczyc, tych, ktorzy
+        przezyli.  
+
+   sigrace.c
+        Tworzy potomka, ktorego zadaniem jest wysylanie sygnalu INT do procesu
+        macierzystego.  Proces macierzysty przechwytuje sygnal INT i wypisuje
+        komunikat, a potem znow ustawia przechwytywanie sygnalu INT.
+        Jesli sygnal INT od potomka przyjdzie przed wywolaniem signal w
+        `lapsygnal', to nieuodporniony na INT proces macierzysty zostanie
+        zabity.  Na tym polega wyscig.  Normalnie proces powinien zaczac
+        obsluge sygnalu od odpowiedniego wywolania funkcji `signal'.
+
+        Nacisniecie control-C na terminalu powoduje wyslanie sygnalu INT do 
+        wszystkich procesow z tym terminalem zwiazanych.  Zauwaz, ze jesli 
+        w trakcie wyscigu nacisniesz control-C, to oba procesy go przechwyca.
+
+        Tylko proces macierzysty wykonal wstepne `signal', natomiast potomny
+        odziedziczyl te obsluge w wyniku wywolania `fork' --- `fork' zachowuje
+        obsluge sygnalow. 
+        Uwaga 1: po wykonaniu fork zerowane sa zegary generujace sygnaly
+        SIGALRM, SIGVTALRM i SIGPROF. 
+	Uwaga 2: wyscig procesow zaobserwujemy wtedy, gdy wlaczona jest 
+	semantyka Systemu V, stad include "systemv.h"
+
+        Procesy przechwytuja takze sygnal QUIT, ktory mozna wywolac naciskajac
+        na klawiaturze control-\.
+
+   sigwait.c
+        Tworzy w nieskonczonosc procesy potomne, ktore natychmiast koncza
+        dzialanie.
+
+        Program ilustruje to, ze jesli SIGCLD jest ignorowany, to zombie nie
+        zajmuja miejsca w tablicy procesow, tylko w miare potrzeby sa
+        usuwane.  Wywolaj program bez parametrow, SIGCLD nie bedzie
+        ignorowany i zombie zatkaja tablice procesow.  Zaobserwujemy to
+        dzieki temu, ze ktores z kolei wywolanie fork zakonczy sie bledem.
+        Jesli podasz jakis parametr, to zombie beda powstawac, ale w miare
+        braku miejsca w tablicy procesow beda automatycznie usuwane.  Przy
+        takim wywolaniu program bedzie dzialal w nieskonczownosc.
+
+   timeout.c
+        Program wczytuje z terminala znaki.  Jesli przez piec sekund nic nie
+        zostanie wpisane, program to wykrywa i wypisuje odpowiedni komunikat.
+
+        Ilustracja przerywania funkcji `read' przez sygnal.
+        Uwaga: signal() musi miec semantyke Systemu V (zob. opis takeover.c).
+
+5. Uwagi:
+
+  a) W podrêczniku systemowym (man) w opisie funkcji sigaction 
+  nie do koñca zrozumiale wyja¶nione jest
+  znaczenie flagi SA_RESTART, która powoduje, ¿e dany sygna³ nie przerywa
+  blokuj±cych wywo³añ systemowych.  
+
+  b) Informacje o wszystkich sygna³ach mo¿na znalezc w sekcji 7
+  podrecznika systemowego do signal (man 7 signal). Polecenie kill -l
+  wypisuje liste wszystkich sygnalow.
+  (dla sygnalow Unix)
+
+  c) Aby wymusic semantyke Systemu V, nalezy dolaczyc plik "systemv.h" 
+  z katalogu biezacego.
+
+  d) Pisanie do lacza, ktore zostalo juz zamkniete przez wszystkich
+  czytelnikow, powoduje wyslanie smiertelnego sygnalu SIGPIPE do
+  pisarza.  Efektem takiej smierci jest komunikat systemowy "Broken pipe".
+
+  e) Funkcja obslugi sygnalu powinna byc w miare moznosci krotka. 
+  Obsluguja one w pewnym sensie sytuacje wyjatkowe. 
+
+Scenariusz zajêæ
+----------------
+
+Sygna³y s± najprostsz± metod± komunikacji miêdzyprocesowej.
+Istnia³y (w mniej rozbudowanej ni¿ obecnie postaci) ju¿ w 
+pierwszych wersjcach Uniksa. Niestety pierwotna implementacja,
+tzw. sygna³y zawodne, nie dawa³a programi¶cie gwarancji 
+poprawnego ich przechwycenia obs³ugi.
+
+Rozpowszechnienie Uniksa wraz z kodem ¼ród³owym spowodowa³o 
+m.in. to, ¿e w ró¿nych dystrybucjach ró¿nie próbowano naprawiæ
+pierwotny b³±d projektowy. Doprowadzi³o to niestety do 
+bardzo ró¿nych, niezgodnych semantycznie ze sob±, sposobów obs³ugi 
+sygna³ów. 
+
+Sytuacjê poprawi³o przyjêcie standardu POSIX (portable Operating
+System Interface), znanego tak¿e pod nazw± IEEE 1003. Poniewa¿
+standard definiowany przez POSIX jest obecnie przestrzegany przez
+niemal wszystkie wersje Uniksa (rowniez Linux), dlatego kod powinien
+byæ tworzony zgodnie z tym interfejsem.
+
+W materia³ach przedstawimy sygna³y w wersji opisanej przez POSIX.
+Do materia³ów do³±czamy tak¿e katalog unix, zawieraj±cy tradycyjn±
+implementacjê sygna³ów uniksowych.
+
+Sygna³y pozwalaj± na asynchroniczne przerwanie dzia³ania procesu 
+przez inny proces (lub j±dro), aby przerwany proces
+móg³ zareagowaæ na jakie¶ zdarzenie. Po obs³u¿eniu sygna³u przerwany
+proces kontynuuje dzia³anie od miejsca przerwania.
+Sygna³y s± u¿ywane do zadañ takich jak koñczenie dzia³ania procesów, czy
+informowanie demonów, ¿e maj± odczytaæ ponownie pliki konfiguracyjne.
+
+Kiedy proces otrzyma sygna³ mo¿e zrobiæ jedn± z trzech rzeczy:
+- zignorowaæ go
+- spowodowaæ, ¿e j±dro wykona specjaln± czê¶æ procesu zanim pozwoli 
+  procesowi kontynuowaæ dzia³anie (co nazywamy obs³ug± sygna³u).
+- pozwoliæ, aby j±dro wykona³o domy¶ln± akcjê, która zale¿y od 
+  rodzaju wys³anego sygna³u.
+
+
+a) Sygna³y zgodne z POSIX:
+
+Oryginalna wersja interfejsu sygna³ów boryka³a siê z problemem
+wielokrotnych sygna³ów (nadej¶cie sygna³u w trakcie obs³ugi
+innego). Rozwi±zaniem tego jest wstrzymanie dostarczenia drugiego
+sygna³u dopóki proces nie zakoñczy obs³ugi pierwszego. Zapewni to, ¿e
+obydwa sygna³y bêd± obs³u¿one i usuwa ryzyko przepe³nienia
+stosu. Kiedy j±dro przechowuje sygna³ do pó¼niejszego dostarczenia, o
+sygnale mówimy, ¿e jest nieza³atwiony. J±dro przechowuje nieza³atwione
+sygna³y w postaci maski: ka¿demu typowi (numerowi) sygna³u odpowiada w
+niej jeden bit. Je¿eli wiêc do procesu zostanie wys³any sygna³,
+wówczas gdy jaki¶ inny tego typu sygna³ jest nieza³atwiony, to tylko
+jeden z nich zostanie dostarczony do procesu. Proces nie ma mo¿liwo¶ci
+dowiedzenia siê, ile razy dany sygna³ by³ do niego wysy³any, poniewa¿
+wiele sygna³ów jest sklejanych w jeden.
+
+Poza blokowaniem sygna³ów w trakcie obs³ugi innych, wprowadzono
+mo¿liwo¶æ jawnego blokowania sygna³ów przez proces. U³atwia to ochronê
+krytycznych czê¶ci programu przy zachowaniu obs³ugi wszystkich
+wys³anych sygna³ów. Taka ochrona pozwala funkcji obs³uguj±cej sygna³y
+na operowanie na strukturach danych utrzymywanych przez inne fragmenty
+kodu przy zachowaniu prostej synchronizacji.
+
+Proces mo¿e otrzymaæ sygna³ w czasie oczekiwania na zaj¶cie
+zewnêtrznego zdarzenia, np wtedy, gdy czeka w funkcji systemowej read
+na wprowadzenie znaku z klawiatury. Funkcje systemowe podzielono na
+funkcje wolne i szybkie. Z grubsza wolne funkcje systemowe to te,
+które mog± d³ugo wstrzymywaæ proces (read z konsoli), a szybkie to te,
+które nie bêd± wstrzymywaæ procesów d³ugo (read z pliku).
+
+W pierwotnej implementacji sygna³ów wolne funkcje systemowe by³y
+przerywane przez sygna³y. W zale¿no¶ci od wersji systemu koñczy³y 
+siê one wówczas przekazuj±c w wyniku b³±d EINTR lub te¿ - po obs³udze
+sygna³u - by³y automatycznie wznawiane.
+Szybkie funkcje systemowe by³y nieprzerywalne - koñczy³y dzia³anie
+zanim sygna³ zosta³ dostarczony do procesu. Obs³uga b³êdu EINTR i
+wznowienie funkcji systemowej w razie konieczno¶ci by³o zadaniem
+procesu. Takie podej¶cie zapewnia³o odpowiedni± funkcjonalno¶æ, ale
+utrudnia³o pisanie programów.
+
+POSIX nie okre¶la, które z powy¿szych zachowañ jest s³uszne, lecz
+pozwala programi¶cie zdecydowaæ, jak ma siê zachowaæ proces.  Dla
+ka¿dego sygna³u proces mo¿e ustawiæ flagê, która wskazuje, czy funkcja
+systemowa przerwana przez ten sygna³ ma byæ automatycznie wznawiana
+przez system.
+
+b) Funkcje systemowe zwi±zane z sygna³ami:
+
+ Wysy³anie sygna³ów
+ -----------------
+
+Wysy³anie sygna³ów z jednego procesu do innego jest realizowane przez funkcjê
+systemow± 
+       
+int kill(pid_t pid, int sig);
+
+ Obs³uga zbiorów sygna³ów
+ -----------------------
+
+Funkcje systemowe POSIX do obs³ugi sygna³ów operuj± na zbiorach
+sygna³ów.  Zbiór sygna³ów jest reprezentowany przez typ 
+sigset\_t a do operowania na nim s³u¿y zbiór makrodefinicji.  POSIX
+definiuje piêæ funkcji do operowania na zbiorze sygna³ów.
+
+int sigemptyset(sigset_t *zbior);
+Zeruje zbiór sygna³ów wskazywany przez parametr zbiór.
+
+int sigfillset(sigset_t *zbior);
+Dodaje do zbioru wszystkie dostêpne sygna³y.
+
+int sigaddset(sigset_t *zbior, int sygnal);
+Dodaje sygna³ sygna³ do zbioru.
+
+int sigdelset(sigset_t *zbior, int sygnal);
+Usuwa sygna³ ze zbioru.
+
+int sigismember(const sigset_t *zbior, int sygnal);
+Przekazuje w wyniku warto¶æ niezerow±, je¿eli sygnal jest w zbiorze,
+a w przeciwnym wypadku 0. 
+
+ Obs³uga sygna³ów
+ ----------------
+
+Do zarejestrowania funkcji obs³ugi sygna³u s³u¿y funkcja:
+
+int * sigaction(int numer_sygnalu, struct sigaction * akcja,
+                struct sigaction * poprzednia_akcja);
+
+Funkcja ta okre¶la, ¿e sygna³ numer_sygnalu bêdzie obs³ugiwany w
+sposób okre¶lony przez parametr akcja. Je¿eli parametr
+poprzednia_akcja jest ró¿ny od NULL, to po wykonaniu funkcji bêdzie
+wskazywaæ obs³ugê sygna³u jaka by³a przed wywo³aniem sigaction.  
+Funkcja sigaction przekazuje w wyniku 0 w przypadku pomy¶lnego zakoñczenia,
+a warto¶æ niezerow± w przypadku b³êdu. 
+
+Sposób obs³ugi sygna³u okre¶la struktura 
+
+struct sigaction {
+        sighandler_t sa_handler;
+        sigset_t sa_mask;
+        unsigned long sa_flags;
+        void (*sa_restorer)(void);
+};
+
+Pole sa_handler jest wska¼nikiem do funkcji obs³ugi sygna³u 
+o nastêpuj±cej deklaracji:
+
+void handler(int numer_sygnalu);
+
+gdzie numer_sygnalu jest numerem syga³u, który spowodowa³ wywo³anie
+funkcji. Funkcja ta zostanie wykonana przez proces po dostarczeniu 
+do niego sygna³u. Pole sa_handler mo¿e tak¿e przyj±æ warto¶æ SIG_IGN lub
+SIG_DFL. Je¶li sa_handler=SIG_DFL, to sygna³ jest obs³ugiwany w
+domy¶lny dla niego sposób (patrz man). Najczê¶ciej jest to zakoñczenie
+procesu. Je¶li sa_handler=SIG_IGN, to sygna³ jest dostarczany do
+procesu, ale nie jest w ¿aden sposób przez niego obs³ugiwany. Nie 
+wszystkie sygna³y mo¿na ignorowaæ (patrz man). 
+
+Pole sa_mask jest zbiorem sygna³ów, które powinny byæ zablokowane w
+trakcie wywo³ania funkcji obs³ugi. Sygna³, który jest obs³ugiwany, jest
+domy¶lnie zablokowany i nie trzeba umieszczaæ go w sa_mask.
+
+Pole sa_flags pozwala procesom na zmianê zachowania przy obs³udze
+sygna³ów. Sk³ada siê ono z bitowej alternatywy nastêpuj±cych flag:
+
+* SA_NOCLDSTOP 
+
+Je¿eli dla sygna³u SIGCHLD jest podana flaga SA_NOCLDSTOP, to sygna³
+jest generowany tylko wtedy, gdy proces zakoñczy³ dzia³anie, a
+wstrzymanie procesów potomnych nie powoduje wys³ania ¿adnego sygna³u. 
+SA_NOCLDSTOP nie ma wp³ywu na inne sygna³y.
+
+* SA_NOMASK
+
+W trakcie wykonywania funkcji obs³ugi sygna³u, obs³ugiwany sygna³ nie
+jest automatycznie blokowany.
+
+* SA_RESETHAND (dawniej SA_ONESHOT) 
+
+Funkcja obs³ugi sygna³u jest instalowana tylko na "jeden raz". Gdy
+j±dro dostarcza sygna³ do procesu, tu¿ przed rozpoczêciem wykonania
+funkcji obs³ugi tego sygna³u przez proces jest przywracany domy¶lny
+sposób jego obs³ugi.
+
+* SA_RESTART 
+
+Kiedy sygna³ jest wys³any do procesu, w czasie, gdy ten wykonuje woln±
+funkcjê systemow±, funkcja systemowa jest automatycznie wznawiana po
+powrocie z funkcji obs³ugi sygna³u.
+
+Ostatnie pole struktury sigaction, sa_restorer, nie jest czê¶ci±
+specyfikacji POSIX i jest zarezerwowane na przysz³o¶æ.
+
+ Zmiana maski sygna³ów
+ --------------------
+
+Funkcje opisane w POSIX pozwalaj± procesowi na blokowanie dowolnego
+zbioru sygna³ów (z wyj. oczywiscie sygna³ów, które z definicji s±
+nieblokowalne, np.: SIGKILL, SIGSTOP) otrzymywanych przez
+proces. Sygna³y nie s± wtedy gubione (ale zgodnie z tym, co powiedziano
+wcze¶niej nie s± zliczane!) - ich dostarczenie jest
+opó¼nianie dopóki proces poprzez odblokowanie sygna³ów nie wyrazi
+chêci ich otrzymania.
+
+Zbiór sygna³ów (typu sigset_t), które proces aktualnie blokuje nosi
+nazwê maski sygna³ów. Funkcja sigprocmask() pozwala na zmianê
+aktualnej maski sygna³ów.
+
+int sigprocmask(int jak, const sigset_t * zbior, sigset_t * stary_zbior); 
+
+Pierwszy parametr, opisuje w jaki sposób ma byæ zmieniana maska
+sygna³ów i mo¿e przyj±æ nastêpuj±ce warto¶ci:
+
+* SIG_BLOCK 
+
+Sygna³y ze zbioru s± dodawane do aktualnej maski sygna³ów. 
+
+* SIG_UNBLOCK 
+
+Sygna³y ze zbioru s± usuwane z aktualnej maski sygna³ów.
+
+* SIG_SETMASK 
+
+Tylko sygna³y nale¿±ce go zbioru s± blokowane.
+
+Nastêpuj±ce wywo³anie pozwala uzyskaæ aktualn± maskê sygna³ów procesu:
+
+sigprocmask(SIG_BLOCK, NULL, &aktualnaMaska); 
+
+ Odczytywanie zbioru nieza³atwionych sygna³ów
+ -------------------------------------------
+
+Uzyskanie informacji, które z sygna³ów s± aktualnie nieza³atwione 
+jest mo¿liwe dziêki funkcji:
+
+int sigpending(sigset_t * zbior);
+
+Po wykonaniu funkcji zbiór wskazywany przez parametr zbior zawiera
+aktualnie nieza³atwione sygna³y.
+
+Oczekiwanie na sygna³
+---------------------
+
+Funkcja systemowa pause() realizuje oczekiwanie na sygna³.
+
+int pause(void);
+
+Funkcja pause() wstrzymuje proces a¿ otrzyma on sygna³.
+
+Funkcja systemowa sigsuspend() tak¿e umo¿liwia oczekiwanie na sygna³.
+
+int sigsuspend(const sigset_t * maska);
+
+Podobnie jak funkcja pause(), sigsuspend() wstrzymuje dzia³anie
+procesu dopóki proces nie otrzyma sygna³u. Jednak w odró¿nieniu od
+funkcji pause(), sigsuspend()} przed rozpoczêciem oczekiwania na
+sygna³ tymczasowo zmienia maskê sygna³ów procesu na warto¶æ wskazywan±
+przez parametr maska.
+
+ Dobre rady:
+ -----------
+
+Poniewa¿ funkcje obs³ugi sygna³ów mog± byæ wykonywane w dowolnej
+chwili, nie nale¿y przy ich pisaniu przyjmowaæ jakichkolwiek za³o¿eñ
+co do tego, co w chwili ich wywo³ania robi program. Nie mog± one te¿
+dokonywaæ zmian, które mog³yby zak³óciæ wykonywanie dalszej czê¶ci
+programu.
+
+Jedn± z najwa¿niejszych rzeczy, na któr± nale¿y zwróciæ uwagê, jest
+zmiana globalnych danych. Je¿eli nie jest wykonana wystarczaj±co
+uwa¿nie, to mo¿e doprowadziæ do sytuacji wy¶cigu.  Najprostszym
+sposobem zapewnienia bezpieczeñstwa globalnych danych jest nie
+stosowanie ich w programie. Inn± metod± jest blokowanie wszystkich
+sygna³ów, których obs³uga modyfikuje struktury danych, na czas
+zmieniania struktur przez resztê programu, zapewniaj±c w ten sposób,
+¿e w danej chwili tylko jeden fragment kodu operuje na tych
+strukturach.
+
+========================================================================
+
+W celu zachowanie zgodno¶ci wstecznej przedstawiamy tak¿ê pierwotn±
+implementacjê sygna³ów. W implementacji tej do ustanawiania w jaki
+sposób nale¿y reagowaæ na dany sygna³ s³u¿y funkcja systemowa
+
+void * signal(int numer_sygnalu, void * obsluga)
+
+Parametr numer_sygnalu jest numerem sygna³em do obs³u¿enia, a obsluga
+definiuje akcjê, jaka ma byæ wykonana, gdy sygna³ jest wysy³any do
+procesu. Parametr obsluga jest wska¼nikiem do funkcji, której jedynym
+argumentem jest numer odebrnego sygna³u i która nie przekazuje w
+wyniku ¿adnej warto¶ci. Kiedy sygna³ jest wysy³any do procesu, j±dro
+wykonuje funkcjê obs³ugi tak szybko, jak jest to mo¿liwe. Po powrocie
+z funkcji obs³ugi j±dro wznawia wykonanie procesu w miejscu jego
+przerwania.
+
+Parametr obsluga mo¿e przyj±æ dwie specjalne warto¶ci: SIG_IGN i
+SIG_DFL (obydwie zdefiniowane w <signal.h>). Je¿eli podamy SIG_IGN, to
+sygna³ bêdzie ignorowany. SIG_DFL informuje j±dro, ¿e ma wykonaæ
+domy¶ln± akcjê zwi±zan± z tym sygna³em, która zazwyczaj polega na
+zakoñczeniu dzia³ania procesu lub ignorowaniu
+sygna³u. Dwa sygna³y, SIGKILL i SIGSTOP, nie mog± byæ obs³ugiwane.
+W przypadku tych dwóch sygna³ów j±dro zawsze wykonuje akcjê domy¶ln±, któr±
+jest odpowiednio zakoñczenie i wstrzymanie dzia³ania procesu.
+
+Funkcja signal() przekazuje w wyniku poprzedni sposób obs³ugi sygna³u.
+
+============================================================================
+
+Co mo¿na zrobiæ po otrzymaniu sygna³u? 
+
+(a) Zignorowaæ go
+=================
+
+main() 
+{
+  signal(SIGINT, SIG_IGN);
+  signal(SIGQUIT, SIG_IGN);
+  /* itd */
+}
+
+(b) Posprz±taæ i zakoñczyæ dzia³anie programu
+=============================================
+
+int moje_dzieci;
+
+void porzadki(int typ_syg)
+
+
+{
+  unlink("/tmp/plik_rob");
+  kill(moje_dzieci, SIGTERM);
+  wait(0);
+  fprintf(stderr, "program konczy dzialanie ...\n");
+  exit(1);
+}
+
+main() 
+{
+  signal(SIGINT, porzadki);
+  open("/tmp/plik_rob", O_RDWR | O_CREAT, 0644);
+  moje_dzieci = fork();
+  /* itd */
+}
+
+(c) Dokonaæ dynamicznej rekonfiguracji
+======================================
+
+void czytaj_plik_konf (int typ_syg) 
+{
+  int fd;
+  fd = open("moj_plik_konf", O_RDONLY);
+
+  /* czytanie parametrow konfiguracyjnych */
+  close(fd);
+  signal(SIGUSR1, czytaj_plik_konf);
+}
+
+main() 
+{
+  czytaj_plik_konf();  /* inicjalna konfiguracja */
+
+  while(1) {   /* obsluga w petli */
+  ...
+  }
+}
+
+(d) Przekazaæ raport nt stanu/dokonaæ zrzutu wewnêtrznych tablic
+================================================================
+
+int licznik;
+
+void drukuj_info(int typ_syg)
+{
+  /* drukuj info o stanie */
+  printf("liczba skopiowanych blokow: %d\n", licznik);
+  signal(SIGUSR1, drukuj_info);
+}
+
+main () 
+{
+  signal(SIGUSR1, drukuj_info);
+  for (licznik=0; licznik<DUZA_LICZBA; licznik++) {
+    /* czytaj blok z tasmy wejsciowej */
+    ...
+    /* pisz blok na tasme wyjsciowa */
+    ...
+  }
+}
+
+(e) W³±czyæ/wy³±czyæ ¶ledzenie
+==============================
+
+int flaga;
+
+void przelacz_flage(int typ_syg) 
+{
+  flaga ^= 1;
+  signal(SIGUSR1, przelacz_flage);
+
+
+}
+
+main() 
+{
+  /* inicjalnie wylacz sledzenie */
+  flaga = 0;
+  signal(SIGUSR1, przelacz_flage);
+  /* zrob cos uzytecznego */
+  /* wewnatrz kodu instrukcje implementujace sledzenie 
+     powinny wygladac nastepujaco: */
+  if (flaga) printf("cos uzytecznego\n");
+}
+
+
+Sygna³y SIGUSR1 i SIGUSR2 s± zdefiniowane jako sygna³y do
+wykorzystanie przez u¿ytkownika (nigdy nie s± generowane przez
+system).
+
+ Polecenia:
+ -----------
+
+Do wys³ania sygna³u z poziomu interpretatora poleceñ s³u¿y polecenie
+kill (informacje man kill). Sygna³y mog± te¿ by¼ generowane przez
+sekwencje klawiszy np. Ctrl-C generuje sygna³ SIGINT, a Ctrl-\ SIGQUIT.
+
+ 
+
+  ZADANIE 5
+  =========
+
+  ------------------------------------------------------------------
+ | Napisz program, który przechwytuje pierwszych piêæ skierowanych  |
+ | do niego sygna³ów SIGINT i SIGTERM, wypisuj±c przy tym stosown±  |
+ | informacjê. Nadej¶cie szóstego sygna³u (SIGINT lub SIGTERM)      |
+ | powoduje zakoñczenie procesu. W trakcie dzia³ania proces blokuje |
+ | wszystkie pozosta³e sygna³y (te które siê da). Przed zakoñczem   |
+ | program wypisuje listê wszystkich sygna³ów, które nadesz³y,      |
+ | lecz by³y zablokowane.                                           |
+  ------------------------------------------------------------------
+
+
+
+
+
