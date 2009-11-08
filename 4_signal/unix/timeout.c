@@ -4,7 +4,7 @@
 #include <string.h>
 #include <signal.h>
 #include "err.h"
-#include "systemv.h"
+//#include "systemv.h"
 
 void przeterminowanie (int typ_sygnalu) {}
 

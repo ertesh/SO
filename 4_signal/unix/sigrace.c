@@ -31,8 +31,8 @@ int main()
    }
 
    /* nizszy priorytet, wieksza szansa na uzyskanie sytuacji wyscigu */
-   if (nice (100) == -1)
-     syserr("nice");
+ 	 if (nice (100) == -1)
+	     syserr("nice");
 
    for (;;);
 }  /*main*/
