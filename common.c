@@ -1,3 +1,5 @@
+/* Maciej Andrejczuk */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,13 +13,13 @@ void read_message(char* text) {
     read(0, text, length);
 }
 
-void write_message(char* text) {
+void write_message(const char* text) {
     int length = strlen(text);
     write(1, &length, sizeof(int));
 	write(1, text, length);
 }
 
-void debug(char *text) {
+void debug(const char *text) {
     int length = strlen(text);
     write(2, text, length);
 }
@@ -41,7 +43,7 @@ void debug_process_info() {
     debug(": ");
 }
 
-void read_grammar(struct grammar* g, char* filename) {
+void read_grammar(struct grammar* g, const char* filename) {
     char line[MAX_LINE_LEN + 3];
     int counter = 0;
     FILE* file = fopen(filename, "r");
@@ -62,7 +64,7 @@ int is_upper(char c) {
     return (c >= 'A' && c <= 'Z');
 }
 
-int is_finishing(char* text) {
+int is_finishing(const char* text) {
     int len, i;
     if (text[0] == FINISHING) return 1;
     if (text[0] == CLOSING) return 0;
@@ -73,15 +75,15 @@ int is_finishing(char* text) {
     return 1;
 }
 
-int is_closing(char* text) {
+int is_closing(const char* text) {
     return (text[0] == CLOSING);
 }
 
-void generate_word(struct grammar *g, char* text) {
+void generate_word(const struct grammar *g, char* text) {
     int i = 0, j = 0, k = 0;
     int len = strlen(text);
     int prod_len;
-    // Searching first nonterminal
+    /* Searching for the first nonterminal */
     while (k < len) {
         if (is_upper(text[k])) break;
         k++;
@@ -89,7 +91,7 @@ void generate_word(struct grammar *g, char* text) {
     if (k == len) {
         fatal("Nonterminal not found as expected.\n");
     }
-    // Searching first production for this nonterminal
+    /* Searching for the first production of this nonterminal */
     while (j < g->len) {
         if (g->prod[j][0] == text[k]) break;
         j++;
@@ -97,8 +99,8 @@ void generate_word(struct grammar *g, char* text) {
     if (j == g->len) {
         fatal("No production for nonterminal %c found\n", text[k]);
     }
-    // Inserting production into text
-    prod_len = strlen(g->prod[j]) - 2;  //without first and last char
+    /* Inserting production into text */
+    prod_len = strlen(g->prod[j]) - 2;  /* without first and last char */
     if (prod_len > 1) {
         for (i = len; i > k; i--) {
             text[i + prod_len - 1] = text[i];
@@ -116,9 +118,9 @@ void send_forward(char* text) {
     debug("\n");
 }
 
-void work(struct grammar* g, char starting_char) {
+void work(const struct grammar* g, char starting_char) {
     char text[MAX_BUF_SIZE];
-    if (starting_char != 0) {  //manager's process
+    if (starting_char != 0) {  /* manager's process */
         text[0] = starting_char;
         text[1] = '\0';
         send_forward(text);

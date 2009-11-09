@@ -1,4 +1,4 @@
-// Maciej Andrejczuk
+/* Maciej Andrejczuk */
 
 #include "err.h"
 #include "common.h"

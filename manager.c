@@ -1,3 +1,5 @@
+/* Maciej Andrejczuk */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,8 +36,8 @@ void prepare_output(int* cur_pipe) {
 }
 
 void make_loop(int n, int* last_pipe, char* grammar) {
-    // last_pipe[0] = input of the recently created pipe
-    // last_pipe[1] = output of the first pipe
+    /* last_pipe[0] = input of the recently created pipe    *
+     * last_pipe[1] = output of the first pipe              */
 	pid_t pid;
 	if (n == 1) {
 		prepare_input(last_pipe);
