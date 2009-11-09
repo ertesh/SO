@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "err.h"
+#include "common.h"
 
 void create_pipe(int* cur_pipe) {
  	if (pipe(cur_pipe) == -1)
@@ -47,7 +49,6 @@ void make_loop(int n, int* last_pipe, char* grammar) {
 		case -1:
 			syserr("Error in fork()\n");
 		case 0:
-		//	printf("potomny, pid=%d, fork=%d\n", getpid(), pid);
 			prepare_input(last_pipe);
             close_pipe(last_pipe);
             prepare_output(next_pipe);
@@ -55,9 +56,8 @@ void make_loop(int n, int* last_pipe, char* grammar) {
 			execl("./worker", "./worker", grammar, NULL);
 			syserr("Error in execl()\n");
 		default:
-		//	printf("macierzysty, pid=%d, fork=%d\n", getpid(), pid);
-            last_pipe[0]=next_pipe[0];
-            make_loop(n-1, last_pipe, grammar);
+            last_pipe[0] = next_pipe[0];
+            make_loop(n - 1, last_pipe, grammar);
             return;
 	}
 }
@@ -66,6 +66,8 @@ void make_loop(int n, int* last_pipe, char* grammar) {
 int main(int argc, char* argv[]) {
 	int n,i;
 	int last_pipe[2];
+    struct grammar g;
+
 	if (argc != 4) {
 		fatal("Usage: %s <workers number> <grammar file> <starting symbol>\n",
             argv[0]);
@@ -74,10 +76,17 @@ int main(int argc, char* argv[]) {
 	if (n <= 0) {
 		fatal("Number of workers should be a positive integer");
 	}
+    if (strlen(argv[3]) != 1 || !is_upper(argv[3][0])) {
+        fatal("Starting symbol should be a single nonterminal (uppercase)\n");
+    }
+
     create_pipe(last_pipe);
 	make_loop(n, last_pipe, argv[2]);
-	write(1, argv[3], sizeof(int));
-	for (i=1; i<n; i++) {
+
+    read_grammar(&g, argv[2]);
+    work(&g, argv[3][0]);
+
+    for (i = 1; i < n; i++) {
 		if (wait(0) == -1) syserr("Error in wait()\n");
 	}
 	return 0;
