@@ -25,7 +25,7 @@ void debug(const char *text) {
 }
 
 void debug_int(int n) {
-    char c[10];
+    char c[12];
     c[10] = '\0';
     int k = 9;
     if (n == 0) debug("0");
@@ -43,21 +43,12 @@ void debug_process_info() {
     debug(": ");
 }
 
-void read_grammar(struct grammar* g, const char* filename) {
-    char line[MAX_LINE_LEN + 3];
-    int counter = 0;
-    FILE* file = fopen(filename, "r");
-    if (file == NULL) {
-        fatal("Failed to open a file with grammar: %s\n", filename);
-    }
-    while (1) {
-        fgets(line, MAX_LINE_LEN, file);
-        if (strlen(line) < 2) break;
-        strncpy(g->prod[counter], line, MAX_LINE_LEN);
-        counter++;
-    }
-    g->len = counter;
-    fclose(file);
+void send_forward(char* text) {
+    write_message(text);
+    debug_process_info();
+    debug("Sending forward: ");
+    debug(text);
+    debug("\n");
 }
 
 int is_upper(char c) {
@@ -77,6 +68,26 @@ int is_finishing(const char* text) {
 
 int is_closing(const char* text) {
     return (text[0] == CLOSING);
+}
+
+
+/* ------- Essential functions -------- */
+
+void read_grammar(struct grammar* g, const char* filename) {
+    char line[MAX_LINE_LEN + 3];
+    int counter = 0;
+    FILE* file = fopen(filename, "r");
+    if (file == NULL) {
+        fatal("Failed to open a file with grammar: %s\n", filename);
+    }
+    while (1) {
+        fgets(line, MAX_LINE_LEN, file);
+        if (strlen(line) < 2) break;
+        strncpy(g->prod[counter], line, MAX_LINE_LEN);
+        counter++;
+    }
+    g->len = counter;
+    fclose(file);
 }
 
 void generate_word(const struct grammar *g, char* text) {
@@ -109,13 +120,6 @@ void generate_word(const struct grammar *g, char* text) {
     for (i = 1; i <= prod_len; i++) {
         text[k + i - 1] = g->prod[j][i];
     }
-}
-void send_forward(char* text) {
-    write_message(text);
-    debug_process_info();
-    debug("Sending forward: ");
-    debug(text);
-    debug("\n");
 }
 
 void work(const struct grammar* g, char starting_char) {
