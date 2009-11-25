@@ -81,7 +81,7 @@ void read_grammar(struct grammar* g, const char* filename) {
         fatal("Failed to open a file with grammar: %s\n", filename);
     }
     while (1) {
-        fgets(line, MAX_LINE_LEN, file);
+        if (fgets(line, MAX_LINE_LEN, file) == 0) break;
         if (strlen(line) < 2) break;
         strncpy(g->prod[counter], line, MAX_LINE_LEN);
         counter++;
