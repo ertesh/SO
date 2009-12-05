@@ -1,10 +1,13 @@
-all: worker manager
+CC=gcc
+CFLAGS=-Wall -ansi -pedantic
 
-manager: manager.o common.o err.o
-	gcc -Wall -o manager manager.o common.o err.o
+all: serwer klient 
 
-worker: worker.o common.o err.o
-	gcc -Wall -o worker worker.o common.o err.o
+serwer: serwer.o err.o
+	gcc -Wall -o serwer serwer.o err.o
+
+klient: klient.o err.o
+	gcc -Wall -o klient klient.o err.o
 
 manager.o: manager.c common.h err.h
 	gcc -Wall -c manager.c

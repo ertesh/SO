@@ -82,7 +82,6 @@ void read_grammar(struct grammar* g, const char* filename) {
     }
     while (1) {
         if (fgets(line, MAX_LINE_LEN, file) == 0) break;
-        if (strlen(line) < 2) break;
         strncpy(g->prod[counter], line, MAX_LINE_LEN);
         counter++;
     }
