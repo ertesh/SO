@@ -34,7 +34,7 @@ int myatoi(char* text) {
     return -1;
 }
 
-int id1 = 0, id2 = 0, id3 = 0, id4 = 0;
+int id1 = 0, id2 = 0, id3 = 0, id4 = 0, id5 = 0;
 int is_working = 1;
 Graph g;
 pthread_rwlock_t* lock;
@@ -42,10 +42,15 @@ pthread_cond_t condition;
 pthread_mutex_t my_mutex;
 
 void setup_signal();
+void clean();
 
 void process_signal(int nr) {
-    is_working = 0;
     setup_signal();
+    clean();
+    MesgOrder message;
+    message.type = 1;
+    message.command = FINISH;
+    send_order(id1, &message, 2 * sizeof(int));
 }
 
 void setup_signal() {
@@ -66,10 +71,12 @@ void prepare(int n, int x) {
     for (i = 0; i < n; i++) {
         pthread_rwlock_init(lock + i, &attr);
     }
+    setup_signal();
     id1 = init_queue(MKEY1, CREATE);
     id2 = init_queue(MKEY2, CREATE);
     id3 = init_queue(MKEY3, CREATE);
     id4 = init_queue(MKEY4, CREATE);
+    id5 = init_queue(MKEY5, CREATE);
 }
 
 void process_order(int n) {
@@ -86,15 +93,11 @@ void process_order(int n) {
             reply.command = -1;
         else {
             /* protokol wstepny */
-            int mi = (x < y) ? x : y;
-            int ma = (x > y) ? x : y;
-            pthread_rwlock_wrlock(lock + mi);
-            pthread_rwlock_wrlock(lock + ma);
+            pthread_rwlock_wrlock(lock + x);
             /* sekcja krytyczna */
             reply.command = modify_graph(g, x, y, w);
             /* protokol koncowy */
-            pthread_rwlock_unlock(lock + mi);
-            pthread_rwlock_unlock(lock + ma);
+            pthread_rwlock_unlock(lock + x);
         }
     }
     if (message.command == DEL) {
@@ -104,15 +107,11 @@ void process_order(int n) {
             reply.command = -1;
         else {
             /* protokol wstepny */
-            int mi = (x < y) ? x : y;
-            int ma = (x > y) ? x : y;
-            pthread_rwlock_wrlock(lock + mi);
-            pthread_rwlock_wrlock(lock + ma);
+            pthread_rwlock_wrlock(lock + x);
             /* sekcja krytyczna */
             reply.command = modify_graph(g, x, y, 0);
             /* protokol koncowy */
-            pthread_rwlock_unlock(lock + mi);
-            pthread_rwlock_unlock(lock + ma);
+            pthread_rwlock_unlock(lock + x);
         }
     }
     if (message.command == FIND) {
@@ -150,6 +149,7 @@ void process_order(int n) {
             reply.command = ret;
         }
     }
+    /* fprintf(stderr, "Odpowiedz: %ld %d\n",reply.type, reply.command); */
     send_info(id2, &reply);
 }
 
@@ -162,28 +162,27 @@ void* process(void* data) {
     struct timeval tp;
     MesgInfo info;
     while (1) {
-        int id = 0;
-        info.type = READY;
-        info.command = numer;
+        int ret = 0;
+        info.type = CHANGE;
+        info.command = numer; /* > 0 => READY */
         send_info(id4, &info);
         gettimeofday(&tp, NULL);
         ts.tv_sec  = tp.tv_sec;
         ts.tv_nsec = tp.tv_usec * 1000;
-        ts.tv_sec += t;
+        ts.tv_sec += (t > 0 ? t : 1);
         if (pthread_mutex_lock(&my_mutex) != 0) {
             syserr("pthread_mutex_lock\n");
         }
-        id = pthread_cond_timedwait(&condition, &my_mutex, &ts);
-        if (id == 0) {
-            if (pthread_mutex_unlock(&my_mutex) != 0) {
-                syserr("pthread_mutex_unlock\n");
-            }
+        ret = pthread_cond_timedwait(&condition, &my_mutex, &ts);
+        if (pthread_mutex_unlock(&my_mutex) != 0) {
+            syserr("pthread_mutex_unlock\n");
+        }
+        if (ret == 0) {
             process_order(n);
-            info.type = READY;
+        } else if (ret == ETIMEDOUT) {
+            info.command = -numer; /* < 0 => FINISHED */
             send_info(id4, &info);
-        } else if (id == ETIMEDOUT) {
-            info.type = EXITING;
-            send_info(id4, &info);
+            break;
         } else {
             syserr("pthread_cond_timedwait\n");
         }
@@ -194,19 +193,21 @@ void* process(void* data) {
 void* worker(void* data) {
     MesgOrder message;
     MesgInfo info;
-    while(is_working) {
+    while(1) {
         /* Receiving order from client */
         receive_order(id1, &message, 0);
+        if (message.command == FINISH) break;
         /* Forwarding order to the inner queue */
         send_order(id3, &message, (message.len + 2)*sizeof(int));
         /* Sending info about new task to the manager */
-        info.type = WORK;
+        info.type = NEW_WORK;
         info.command = 1;
         send_info(id4, &info);
         /* Waiting for a confirmation that process is executing this order */
-        receive_info(id4, &info, 2);
+        receive_info(id5, &info, 0);
     }
-    info.type = EXITING;
+    info.type = CHANGE;
+    info.command = EXITING;
     send_info(id4, &info);
     return 0;
 }
@@ -214,9 +215,9 @@ void* worker(void* data) {
 void init_thread_attr(pthread_attr_t* attr) {
     int err;
     if ((err = pthread_attr_init(attr)) != 0 )
-            syserr("attrinit");
+        syserr("attrinit");
     if ((err = pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE)) != 0)
-              syserr("setdetach");
+        syserr("setdetach");
 }
 
 void init_thread(pthread_t* name, pthread_attr_t* attr, void*(*fun)(void*),
@@ -236,7 +237,7 @@ void manager(int n, int x, int t) {
     int *tab = (int*) malloc(x * sizeof(int));
     void ** status = 0;
     int i;
-
+    int new_work = 0;
     init_thread_attr(&attr);
     init_thread(&daemon, &attr, worker, 0);
 
@@ -244,44 +245,59 @@ void manager(int n, int x, int t) {
         tab[x] = 0;
     }
     while (1) {
-        receive_info(id4, &info, 0);
-        if (info.type == WORK) {
-            if (vacant_count > 0) {
-                /* Signal */
+        if (new_work) receive_info(id4, &info, CHANGE);
+        else receive_info(id4, &info, 0);
+        if (info.type == NEW_WORK) {
+            new_work = 1;
+        }
+        else if (info.type == CHANGE) {
+            if (info.command >= READY) {
+                int num = info.command - 1; /* Counting from 0 */
+                vacant_count++;
+                tab[num] = 1;
+            }
+            if (info.command == EXITING) {
+                if (pthread_join(daemon, status) != 0)
+                        syserr("pthread_join\n");
+                for (i = 0; i < x; i++) {
+                    if (tab[i] != 0) {
+                        if (pthread_join(threads[i], status) != 0)
+                            syserr("pthread_join\n");
+                    }
+                }
+                break;
+            }
+            if (info.command <= FINISHED) {
+                int num = -info.command - 1; /* Counting from 0 */
+                process_count--;
                 vacant_count--;
+                tab[num] = 0;
+                if (pthread_join(threads[num], status) != 0)
+                    syserr("pthread_join\n");
+            }
+        } else fatal("Unknown message\n");
+
+        if (new_work) {
+            if (vacant_count > 0) {
+                vacant_count--;
+                /*pthread_mutex_lock(&my_mutex);*/
+                pthread_cond_signal(&condition);
+                /*pthread_mutex_unlock(&my_mutex);*/
+                new_work = 0;
+                info.type = 1; /* Not really important */
+                info.command = 1; /* Not really important */
+                send_info(id5, &info);
             } else if (process_count < n) {
                 for (i = 0; i < x; i++)
                     if (tab[i] == 0) {
-                        int args[] ={n, t, i};
+                        int args[] ={n, t, i + 1};
                         tab[i] = 1;
                         init_thread(threads + i, &attr, process, args);
                         break;
                     }
                 process_count++;
-            } else {
-               /* Czekaj */
             }
-        }
-        if (info.type == READY) {
-            vacant_count++;
-        }
-        if (info.type == FINISHED) {
-            int ret;
-            process_count--;
-            vacant_count--;
-            tab[info.command] = 0;
-            ret = pthread_join(threads[info.command], status);
-            /* Errory */
-        }
-        if (info.type == EXITING) {
-            int ret = pthread_join(daemon, status);
-            for (i = 0; i < x; i++) {
-                if (tab[i] != 0) {
-                    ret = pthread_join(threads[i], status);
-                   /* Errory */
-                }
-            }
-            break;
+            /* Otherwise just do nothing */
         }
     }
 }
@@ -292,7 +308,7 @@ void clean() {
     close_queue(id2);
     close_queue(id3);
     close_queue(id4);
-
+    close_queue(id5);
     sleep(1);
     exit(0);
 }

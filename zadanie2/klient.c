@@ -28,7 +28,8 @@ int myatoi(char* text) {
 int add_edge(int argc, char* argv[]) {
 	int V, W, G;
     int id1, id2;
-    Mesg message;
+    MesgOrder message;
+    MesgInfo reply;
     if (argc != 5)
         print_usage_info(argv[0]);
 	if ((V = myatoi(argv[2])) < 0)
@@ -45,16 +46,17 @@ int add_edge(int argc, char* argv[]) {
     message.data[1] = W;
     message.data[2] = G;
     id1 = init_queue(MKEY1, 0);
-    send_message(id1, &message, 5*sizeof(int));
+    send_order(id1, &message, 5 * sizeof(int));
     id2 = init_queue(MKEY2, 0);
-    receive_message(id2, &message, getpid());
-    return message.command;
+    receive_info(id2, &reply, getpid());
+    return reply.command;
 }
 
 int remove_edge(int argc, char* argv[]) {
 	int V, W;
     int id1, id2;
-    Mesg message;
+    MesgOrder message;
+    MesgInfo reply;
     if (argc != 4)
         print_usage_info(argv[0]);
 	if ((V = myatoi(argv[2])) < 0)
@@ -68,16 +70,17 @@ int remove_edge(int argc, char* argv[]) {
     message.data[0] = V;
     message.data[1] = W;
     id1 = init_queue(MKEY1, 0);
-    send_message(id1, &message, 4 * sizeof(int));
+    send_order(id1, &message, 4 * sizeof(int));
     id2 = init_queue(MKEY2, 0);
-    receive_message(id2, &message, getpid());
-    return message.command;
+    receive_info(id2, &reply, getpid());
+    return reply.command;
 }
 
 int find_hamiltonian(int argc, char* argv[]) {
     int i, p;
     int id1, id2, ret;
-    Mesg message;
+    MesgOrder message;
+    MesgInfo reply;
 	if (argc < 1) print_usage_info(argv[0]);
 
     message.type = getpid();
@@ -90,13 +93,13 @@ int find_hamiltonian(int argc, char* argv[]) {
     }
 
     id1 = init_queue(MKEY1, 0);
-    send_message(id1, &message, argc * sizeof(int));
+    send_order(id1, &message, argc * sizeof(int));
     id2 = init_queue(MKEY2, 0);
-    receive_message(id2, &message, getpid());
-    printf("H %d\n", message.command);
-    if (message.command == -1) ret = -1;
-    if (message.command == 0) ret = 1;
-    if (message.command > 0) ret = 0;
+    receive_info(id2, &reply, getpid());
+    printf("H %d\n", reply.command);
+    if (reply.command == -1) ret = -1;
+    if (reply.command == 0) ret = 1;
+    if (reply.command > 0) ret = 0;
     return ret;
 }
 

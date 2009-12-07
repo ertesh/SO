@@ -5,17 +5,21 @@
     #define MKEY2   7273L
     #define MKEY3   7274L
     #define MKEY4   7275L
+    #define MKEY5   7276L
     #define	MAXMESGDATA 50
     #define CREATE 0666 | IPC_CREAT | IPC_EXCL
 
     #define ADD 1
     #define DEL 2
     #define FIND 3
+    #define FINISH 4
 
-    #define WORK 1
-    #define READY 2
-    #define FINISHED 3
-    #define EXITING 4
+    #define NEW_WORK 1
+    #define CHANGE 2
+
+    #define READY 1
+    #define EXITING 0
+    #define FINISHED -1
     typedef struct {
         long type;
         int command;
