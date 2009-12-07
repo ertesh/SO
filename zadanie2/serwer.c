@@ -6,9 +6,11 @@
 
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
+#include <errno.h>
 #include <sys/ipc.h>
 #include <sys/types.h>
-#include <pthread.h>
+#include <sys/time.h>
 
 #include "err.h"
 #include "mesg.h"
@@ -33,17 +35,26 @@ int myatoi(char* text) {
 }
 
 int id1 = 0, id2 = 0, id3 = 0, id4 = 0;
+int is_working = 1;
 Graph g;
 pthread_rwlock_t* lock;
+pthread_cond_t condition;
+pthread_mutex_t my_mutex;
 
-void clean(int nr) {
-    fprintf(stderr, "Przechwycono sygnal %d\n", nr);
-    close_queue(id1);
-    close_queue(id2);
-    close_queue(id3);
-    close_queue(id4);
-    sleep(1);
-    exit(0);
+void setup_signal();
+
+void process_signal(int nr) {
+    is_working = 0;
+    setup_signal();
+}
+
+void setup_signal() {
+    if (signal(SIGINT, process_signal) == SIG_ERR)
+        syserr("signal(SIGINT)\n");
+    if (signal(SIGHUP, process_signal) == SIG_ERR)
+        syserr("signal(SIGHUP)\n");
+    if (signal(SIGTERM, process_signal) == SIG_ERR)
+        syserr("signal(SIGTERM)\n");
 }
 
 void prepare(int n, int x) {
@@ -54,21 +65,14 @@ void prepare(int n, int x) {
     pthread_rwlockattr_init(&attr);
     for (i = 0; i < n; i++) {
         pthread_rwlock_init(lock + i, &attr);
-
+    }
     id1 = init_queue(MKEY1, CREATE);
     id2 = init_queue(MKEY2, CREATE);
     id3 = init_queue(MKEY3, CREATE);
     id4 = init_queue(MKEY4, CREATE);
-    if (signal(SIGINT, clean) == SIG_ERR)
-        syserr("signal(SIGINT)\n");
-    if (signal(SIGHUP, clean) == SIG_ERR)
-        syserr("signal(SIGHUP)\n");
-    if (signal(SIGTERM, clean) == SIG_ERR)
-        syserr("signal(SIGTERM)\n");
-
 }
 
-void process_order() {
+void process_order(int n) {
     MesgOrder message;
     MesgInfo reply;
     receive_order(id3, &message, 0);
@@ -150,36 +154,60 @@ void process_order() {
 }
 
 void* process(void* data) {
-    int n = (int) data[0];
-    int t = (int) data[1];
-    int numer = (int) data[2];
+    int* tab= (int*) data;
+    int n = (int) tab[0];
+    int t = (int) tab[1];
+    int numer = (int) tab[2];
+    struct timespec ts;
+    struct timeval tp;
     MesgInfo info;
-    while (true) {
+    while (1) {
+        int id = 0;
         info.type = READY;
-        info.message = numer;
+        info.command = numer;
         send_info(id4, &info);
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 5;
-        pthread_cond_timedwait(&condition, &my_mutex, &ts);
-
+        gettimeofday(&tp, NULL);
+        ts.tv_sec  = tp.tv_sec;
+        ts.tv_nsec = tp.tv_usec * 1000;
+        ts.tv_sec += t;
+        if (pthread_mutex_lock(&my_mutex) != 0) {
+            syserr("pthread_mutex_lock\n");
+        }
+        id = pthread_cond_timedwait(&condition, &my_mutex, &ts);
+        if (id == 0) {
+            if (pthread_mutex_unlock(&my_mutex) != 0) {
+                syserr("pthread_mutex_unlock\n");
+            }
+            process_order(n);
+            info.type = READY;
+            send_info(id4, &info);
+        } else if (id == ETIMEDOUT) {
+            info.type = EXITING;
+            send_info(id4, &info);
+        } else {
+            syserr("pthread_cond_timedwait\n");
+        }
     }
+    return 0;
 }
 
 void* worker(void* data) {
     MesgOrder message;
     MesgInfo info;
-    while(1) {
+    while(is_working) {
         /* Receiving order from client */
         receive_order(id1, &message, 0);
         /* Forwarding order to the inner queue */
         send_order(id3, &message, (message.len + 2)*sizeof(int));
         /* Sending info about new task to the manager */
-        info.type = 1;
-        info.message = 1;
+        info.type = WORK;
+        info.command = 1;
         send_info(id4, &info);
         /* Waiting for a confirmation that process is executing this order */
         receive_info(id4, &info, 2);
     }
+    info.type = EXITING;
+    send_info(id4, &info);
     return 0;
 }
 
@@ -191,9 +219,10 @@ void init_thread_attr(pthread_attr_t* attr) {
               syserr("setdetach");
 }
 
-void init_thread(pthread_t* name, pthread_attr_t* attr, void*(*fun)(void*)) {
+void init_thread(pthread_t* name, pthread_attr_t* attr, void*(*fun)(void*),
+        void* args) {
     int err;
-    if ((err = pthread_create(name, attr, fun, 0)) != 0)
+    if ((err = pthread_create(name, attr, fun, args)) != 0)
         syserr("create");
 }
 
@@ -204,12 +233,12 @@ void manager(int n, int x, int t) {
     MesgInfo info;
     int process_count = 0;
     int vacant_count = 0;
-    int *tab = (int) malloc(x * sizeof(int));
-
+    int *tab = (int*) malloc(x * sizeof(int));
+    void ** status = 0;
     int i;
 
     init_thread_attr(&attr);
-    init_thread(&daemon, &attr, worker);
+    init_thread(&daemon, &attr, worker, 0);
 
     for (i = 0; i < x; i++) {
         tab[x] = 0;
@@ -223,8 +252,9 @@ void manager(int n, int x, int t) {
             } else if (process_count < n) {
                 for (i = 0; i < x; i++)
                     if (tab[i] == 0) {
+                        int args[] ={n, t, i};
                         tab[i] = 1;
-                        init_thread(threads + i, &attr, process);
+                        init_thread(threads + i, &attr, process, args);
                         break;
                     }
                 process_count++;
@@ -232,21 +262,42 @@ void manager(int n, int x, int t) {
                /* Czekaj */
             }
         }
-        if (info.type == FINISHED) {
+        if (info.type == READY) {
             vacant_count++;
         }
-        if (info.type == EXITING) {
-            void ** status = 0;
+        if (info.type == FINISHED) {
+            int ret;
             process_count--;
             vacant_count--;
-            tab[info.type] = 0;
-            pthread_join(threads[info.type], status);
+            tab[info.command] = 0;
+            ret = pthread_join(threads[info.command], status);
+            /* Errory */
+        }
+        if (info.type == EXITING) {
+            int ret = pthread_join(daemon, status);
+            for (i = 0; i < x; i++) {
+                if (tab[i] != 0) {
+                    ret = pthread_join(threads[i], status);
+                   /* Errory */
+                }
+            }
+            break;
         }
     }
 }
 
-int main(int argc, char* argv[]) {
+void clean() {
 
+    close_queue(id1);
+    close_queue(id2);
+    close_queue(id3);
+    close_queue(id4);
+
+    sleep(1);
+    exit(0);
+}
+
+int main(int argc, char* argv[]) {
     int n, x, t;
     if (argc != 4)
         print_usage_info(argv[0]);
@@ -258,6 +309,7 @@ int main(int argc, char* argv[]) {
         print_usage_info(argv[0]);
     prepare(n, x);
     manager(n, x, t);
+    clean();
     return 0;
 }
 

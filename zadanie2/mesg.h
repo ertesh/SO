@@ -13,8 +13,9 @@
     #define FIND 3
 
     #define WORK 1
-    #define FINISHED 2
-    #define EXITING 3
+    #define READY 2
+    #define FINISHED 3
+    #define EXITING 4
     typedef struct {
         long type;
         int command;

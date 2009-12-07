@@ -4,8 +4,8 @@
     typedef int** Graph;
 
     void prepare_graph(Graph* g, int n);
-    void copy_subgraph(const Graph* source, Graph* dest, int n, int mask);
+    void copy_subgraph(const Graph* source, Graph* dest, int n, long long mask);
     int modify_graph(const Graph g, int x, int y, int w);
-    int find_hamiltonian(const Graph g, int n, int mask);
+    int find_hamiltonian(const Graph g, int n, long long mask);
 
 #endif

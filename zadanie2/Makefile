@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall
-LFLAGS = -lm
+LFLAGS = -lm -pthread
 OBJS = serwer.o klient.o err.o mesg.o graph.o
 EXEC = serwer klient
 
