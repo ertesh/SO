@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#-----------------------------------------------------
+#
+# Procedura wywoluje edytor vim tworzac
+# zapasowa kopie edytowanego zbioru
+# Jesli plik nie istnial, to zostanie zalozony
+#
+#-----------------------------------------------------
+if test "$1"
+then if test -w "$1" -a -f "$1"
+# then if [ -w "$1" -a -f "$1" ]        # nawiasy moga byc uzyte 
+                                    # zamiast test
+	then cp "$1"  "$1".bak
+	fi
+	vim "$1"
+else echo Podaj nazwe pliku do edycji
+fi
+

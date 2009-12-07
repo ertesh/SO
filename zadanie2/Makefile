@@ -1,26 +1,25 @@
-CC=gcc
-CFLAGS=-Wall -ansi -pedantic
+CC = gcc
+CFLAGS = -Wall
+LFLAGS = -lm
+OBJS = serwer.o klient.o err.o mesg.o graph.o
+EXEC = serwer klient
 
-all: serwer klient 
+all: $(EXEC)
 
-serwer: serwer.o err.o
-	gcc -Wall -o serwer serwer.o err.o
+serwer: serwer.o err.o mesg.o graph.o
+	$(CC) $(LFLAGS) $+ -o $@
 
-klient: klient.o err.o
-	gcc -Wall -o klient klient.o err.o
+klient: klient.o err.o mesg.o
 
-manager.o: manager.c common.h err.h
-	gcc -Wall -c manager.c
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-worker.o: worker.c common.h err.h
-	gcc -Wall -c worker.c
-
-common.o: common.h common.c
-	gcc -Wall -c common.c
-
-err.o: err.c err.h
-	gcc -Wall -c err.c
+klient.o: err.h mesg.h
+serwer.o: err.h mesg.h graph.h
 
 clean:
-	rm -f *.o worker manager
+	rm -f *.o 
+	rm -f *~
+	rm -f $(EXEC)
 
+.PHONY: clean

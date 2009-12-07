@@ -1,1 +1,0 @@
-#define FIFONAME_ENV	"FIFO_NAME"
