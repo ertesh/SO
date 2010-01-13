@@ -1,0 +1,460 @@
+Laboratorium 11
+================
+
+Zaawansowana obs³uga plików
+---------------------------
+Literatura
+
+[1] Johnson, Troan "Linux Application Development", rozdzia³ 12
+[2] manual do poszczególnych funkcji
+
+1. Multipleksowanie deskryptorów 
+----------------------------------------------------------------
+W wielu zastosowaniach istnieje potrzeba oczekiwania na mo¿liwo¶æ wykonania
+operacji wej¶cia/wyj¶cia na jednym z wielu deskryptorów.
+Mog± to byæ deskryptory ³±czy (pipe), kolejek FIFO, standardowego wej¶cia, 
+gniazd, itp. 
+
+Przyk³adem programu, który musi sprawdzaæ jednocze¶nie kilka deskryptorów
+mo¿e byæ serwer HTTP. Musi on jednocze¶nie sprawdzaæ, czy nie nadesz³o nowe
+po³±czenie na gnie¼dzie (gniazdo to ³±cze s³u¿±ce do komunikacji sieciowej), 
+na którym nas³uchuje, odczytywaæ nap³ywaj±ce dane z ju¿ otwartych po³±czeñ 
+i wysy³aæ dane w odpowiedzi.
+
+Poni¿ej przedstawione zostan± ró¿ne próby podej¶cia do problemu sprawdzania
+stanu deskryptorów i dochodzenia do w³a¶ciwego rozwi±zania. Dla maksymalnej
+przejrzysto¶ci rozpatrujemy prosty problem czytania z dwóch ³±czy naraz.
+
+Pierwsza próba - czytanie blokuj±ce
+-----------------------------------
+Plik: mpx-block.c 
+
+Dzia³anie:
+Program próbuje odczytaæ dane na przemian z jednego i drugiego deskryptora
+³±cza.
+
+Sposób uruchomienia: 
+Tworzymy ³±cza - mknod p1 p, mknod p2 p; (lub make nodes)
+W pierwszym okienku/konsoli uruchamiamy: cat > p1, 
+W drugiej konsoli uruchamiamy: cat > p2
+W trzeciej konsoli uruchamiamy: ./mpx-block
+
+Wpisuj±c dane w pierwszej i drugiej konsoli (trzeba wcisn±æ Enter,
+¿eby ca³a linia zosta³a wys³ana) mo¿na wysy³aæ dane do odpowiedniego
+deskryptora.
+
+Wady:
+Program próbuje odczytaæ dane z pierwszego pliku i je¿eli jest 
+on pusty to zawiesza siê, mimo ¿e w drugim s± dostêpne dane.
+Oznacza to, ¿e program dzia³a niepoprawnie.
+
+Druga próba - czytanie nieblokuj±ce
+-----------------------------------
+Plik: mpx-nonblock.c
+Dzia³anie:
+Program na przemian próbuje odczytaæ dane z ka¿dego deskryptora w sposób
+nieblokuj±cy. Je¶li danych nie ma, w±tek nie zostaje zablokowany tylko
+funkcja read() zwraca odpowiedni kod b³êdu informuj±cy, ¿e nie ma dostêpnych
+danych. Program kontynuuje wiêc dzia³anie.
+
+Sposób uruchomienia: 
+Jak poprzednio. 
+Program dzia³a, ale zajmuje ca³y czas procesora. Mo¿na to zaobserwowaæ
+uruchamiaj±c program "top".
+
+Wady:
+Aktywne oczekiwanie. W systemie wieloprocesowym jest to rozwi±zanie
+nieakceptowalne.
+
+W³a¶ciwe rozwi±zanie - nale¿y u¿yæ funkcji select lub poll
+----------------------------------------------------------
+Plik: mpx-select.c
+   
+Funkcje select() i poll() pozwalaj± na wstrzymanie dzia³ania w oczekiwaniu 
+na dane na wielu deskryptorach jednocze¶nie (istotne zastosowanie - 
+komunikacja sieciowa poprzez gniazda).
+
+Funkcja select()
+----------------
+Starsze rozwi±zanie (nie zalecane), korzysta z niewygodnych w u¿yciu zbiorów, 
+w których ustawiony bit oznacza zdarzenie dotycz±ce deskryptora o numerze
+odpowiadaj±cym numerowi bitu.
+UWAGA: u¿ycie du¿ej liczby deskryptorów w procesie mo¿e spowodowaæ
+mazanie po pamiêci poza zbiorem, poniewa¿ makra FD_SET/FD_CLR nie sprawdzaj±,
+czy nie pisz± poza struktur± fd_set.
+
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+int select(int ile_desk, fd_set *desk_czyt, fd_set *desk_pis,
+            fd_set *desk_wyj, struct timeval *czas_oczekiwania);
+
+Wywo³anie funkcji select() powoduje zablokowanie procesu a¿ który¶ z podanych
+deskryptorów nie znajdzie siê w ¿±danym stanie. Przed wywo³aniem nale¿y
+ustawiæ bity odpowiadaj±ce deskryptorom, które chcemy obserwowaæ w odpowiednich 
+zbiorach.
+
+Ustawienie bitu w zbiorze "desk_czyt" powoduje, ¿e nadej¶cie danych do
+odczytania na tym deskryptorze spowoduje przerwanie oczekiwania.
+
+Ustawienie bitu w zbiorze "desk_pis" powoduje, ¿e zwolnienie miejsca w
+deskryptorze na zapis danych spowoduje przerwanie oczekiwania.
+
+Ustawienie bitu w zbiorze "desk_wyj" powoduje, ¿e nadej¶cie danych
+wyj±tkowych (out-of-band data) w deskryptorze spowoduje przerwanie 
+oczekiwania. W praktyce bardzo rzadko u¿ywane.
+
+Je¶li parametr "czas_oczekiwania" jest podany (nie jest NULL-em), powrót z
+funkcji nast±pi po up³ywie podanego czasu je¶li wcze¶niej ¿aden z
+obserwowanych deskryptorów nie zmieni swojego stanu.
+
+Parametr "ile_desk" musi zawieraæ liczbê o jeden wiêksz± od najwiêkszego 
+numeru deskryptora ustawionego w jednym ze zbiorów. Na przyk³ad, je¶li
+obserwujemy deskryptor 3 do czytania i 5 do pisania, to musimy ustawiæ
+ile_desk na 6 (=5+1). Uwaga! Deskryptory s± numerowane od zera.
+
+Po wywo³aniu select() zbiory bêd± mia³y ustawione bity okre¶laj±ce, które 
+deskryptory s± w odpowiednim stanie (np. ustawienie bitu w zbiorze
+"desk_czyt" oznacza, ¿e s± dane do odczytania). 
+
+Funkcja select() przekazuje liczbê bitów deskryptorów ustawionych w zbiorach.
+
+Uwaga! "czas_oczekiwania" trzeba inicjowaæ za ka¿dym razem, bo zostaje 
+zmodyfikowany.
+
+Do operowania zbiorami deskryptorów s³u¿± nastêpuj±ce makrodefinicje:
+
+FD_ZERO(fd_set *zbior_desk) - zeruje zbior_desk 
+FD_SET(int desk, fd_set *zbior_desk) - dodaje deskryptor do zbioru
+FD_CLR(int desk, fd_set *zbior_desk) - usuwa deskryptor ze zbioru
+FD_ISSET(int desk, fd_set *zbior_desk) - sprawdza, czy bit deskryptora 
+	jest ustawiony
+
+Funkcja poll()
+--------------
+Zasada dzia³ania funkcji poll() jest analogiczna do select(), ale poll()
+u¿ywa du¿o wygodniejszej w u¿yciu tablicy opisuj±cej, które deskryptory maj±
+byæ obserwowane.
+
+#include <sys/poll.h>
+
+int poll(struct pollfd *desk, unsigned int ile_desk, int czas_oczekiwania);
+
+W wywo³aniu funkcji poll() podaje siê wska¼nik do tablicy struktur pollfd
+(parametr "desk"), liczbê struktur w tablicy "desk" (parametr "ile_desk")
+oraz czas oczekiwania, po którym nast±pi powrót z funkcji je¶li ¿aden z
+deskryptorów nie zmieni stanu. Parametr "czas_oczekiwania" jest
+wyra¿ony w milisekundach. Podanie ujemnej liczby milisekund oznacza
+nieskoñczone oczekiwanie.
+
+Struktura pollfd opisuje jeden obserwowany deskryptor.
+ 
+struct pollfd {
+	int fd;
+	short events;
+	short revents;
+};
+
+Pola:
+fd - numer obserwowanego deskryptora
+events - flagi obserwowane zdarzenia
+revents - flagi zdarzeñ, które zasz³y w czasie wywo³ania poll()
+
+W polu events mo¿na ustawiæ nastêpuj±ce flagi:
+POLLIN - obserwowanie nadej¶cia danych do odczytu
+POLLOUT - obserwowanie mo¿liwo¶ci zapisania danych
+POLLPRI - obserwowanie nadej¶cia danych wyj±tkowych (out-of-band)
+
+Po wywo³aniu funkcji poll() w polu revents ustawione s± flagi oznaczaj±ce
+zdarzenia, które zasz³y. Mog± to byæ flagi POLLIN, POLLOUT i POLLPRI -
+oznaczaj± wtedy zaj¶cie odpowiadaj±cego im zdarzenia. Oprócz tego mog±
+zostaæ ustawione równie¿ inne flagi:
+POLLERR - wyst±pi³ b³±d
+POLLHUP - roz³±czenie terminala (hang-up)
+POLLNVAL - niew³a¶ciwy deskryptor
+
+Funkcja poll() zwraca liczbê deskryptorów dla których zasz³o jakie¶ zdarzenie.
+
+Zadanie do samodzielnego wykonania
+---------------------------------- 
+Napisaæ program umo¿liwiaj±cy rozmowê dwóch osób na tym samym komputerze: 
+program czyta ze standardowego wej¶cia i to co przeczyta zapisuje do 
+pierwszego ³±cza i jednocze¶nie czyta z drugiego ³±cza i to co przeczyta 
+wypisuje na standardowe wyj¶cie.
+
+2. Odwzorowanie plików do pamiêci 
+---------------------------------
+Wstêp
+-----
+
+Odwzorowywanie plików do pamiêci (memory mapping) polega na zwi±zaniu
+obszaru pamiêci wirtualnej procesu z pewnym obszarem pliku. Pierwsza próba 
+odwo³ania do tego obszaru pamiêci powoduje wczytanie danych z pliku (za
+pomoc± mechanizmów stronicowania). Proces mo¿e modyfikowaæ dane w takim
+obszarze pamiêci, a nastêpnie dane te zostan± zapisane w to samo miejsce w
+pliku. Strony wchodz±ce w sk³ad odwzorowywanego obszaru s± zarz±dzane
+podobnie jak inne strony procesu, wiêc mog± byæ wymiatane na dysk i
+sprowadzane z powrotem. Zasadnicz± ró¿nic± jest to, ¿e gdy system zdecyduje
+siê na usuniêcie danych z pamiêci, to nie s± one zapisywane do pliku wymiany, 
+lecz z powrotem do pliku.
+
+Odwzorowywanie pliku do pamiêci u³atwia modyfikowanie zawarto¶ci pliku. Nie
+trzeba u¿ywaæ funkcji read() i write() do operowania na danych, ani
+przesuwaæ wska¼nika po³o¿enia w pliku. Dostêp do danych jest bezpo¶redni.
+
+Ponadto odwzorowywanie plików do pamiêci ma inne u¿yteczne cechy:
+- transmisja danych odbywa siê z pominieciem puli buforów 
+- procesy mog± wspó³dzieliæ obszary pamiêci utrzymywane niezale¿nie
+  od istnienia procesów
+- mo¿na odwzorowywaæ pliki wykonywalne, co pozwala na dynamiczne ³adowanie
+  nowych sk³adowych (np. bibliotek dzielonych)
+
+Tworzenie odwzorowañ
+--------------------
+Do tworzenia odwzorowania s³u¿y funkcja mmap().
+
+#include <sys/mman.h>
+caddr_t mmap(caddr_t adres, size_t rozmiar, int ochrona, int flagi,
+	int desk, off_t offset);
+
+Parametr "adres" oznacza proponowany adres w pamiêci wirtualnej procesu, pod 
+którym plik  ma byæ odwzorowany. Adres nie musi byæ podany, najczê¶ciej jest 
+ustawiany na 0.
+Parametry "rozmiar" i "offset" oznaczaj± odpowiednio rozmiar i przesuniêcie
+odwzorowywanego obszaru w pliku.
+Parametr "desk" zawiera deskryptor odwzorowywanego pliku.
+
+Parametr "ochrona" okre¶la prawa dostêpu do odwzorowywanego obszaru pamiêci. 
+Mo¿na podaæ nastêpuj±ce prawa:
+PROT_NONE  - brak dostêpu
+PROT_READ  - odwzorowany obszar mo¿e byæ czytany
+PROT_WRITE - odwzorowany obszar mo¿e byæ zapisywany
+PROT_EXEC  - odwzorowany obszar mo¿e byæ wykonywany
+
+Uwaga! Podane prawa dostêpu musz± byæ zgodne z trybem otwarcia pliku. Np.
+nie mo¿na ustawiæ prawa PROT_WRITE na odwzorowaniu pliku otwartego w trybie
+tylko do odczytu.
+
+Parametr "flagi" okre¶la tryb tworzenia odwzorowania.
+MAP_ANONYMOUS - tworzy anonimowe odwzorowanie (nie zwi±zane z
+	plikiem na dysku, lecz z plikiem wymiany), parametr "desk" jest w
+	takim odwzorowaniu ignorowany.
+MAP_FIXED     - odwzorowanie pod adres podany w parametrze "adres", je¶li
+	takie odwzorowanie jest niemo¿liwe, mmap() koñczy siê z b³êdem.
+MAP_PRIVATE   - odwzorowanie prywatne (zmiany w odwzorowywanym obszarze pamiêci 
+	bêd± widoczne wy³±cznie dla procesu, który utworzy³ odwzorowanie i
+	nie zostan± zapisane do pliku). U¿ywane np. do odwzorowywania kodu 
+	programu i poprawiania miejsc relokacji.
+MAP_SHARED    - zmiany w obszarze s± widoczne we wszystkich odwzorowaniach
+	danego pliku i zostaj± zapisane na dysk.
+MAP_DENYWRITE - ustawienie tej flagi powoduje uniemo¿liwienie zwyk³ych
+	zapisów do pliku (u¿ywaj±c funkcji write())
+MAP_LOCKED    - ustawienie tej flagi powoduje, ¿e strony z tego odwzorowania
+	nie bêd± wymiecione na dysk.
+	
+Funkcja mmap() zwraca adres pod którym zosta³o stworzone odwzorowanie lub
+warto¶æ MAP_FAILED, oznaczaj±c± ¿e wyst±pi³ b³±d. W przypadku b³êdu
+ustawiana jest odpowiednio zmienna errno.
+
+Usuwanie odwzorowania
+---------------------
+Do usuwania czê¶ci odwzorowywanego obszaru s³u¿y funkcja munmap()
+
+int munmap(caddr_t adres, size_t rozmiar);
+
+Parametr "adres" okre¶la pocz±tek obszaru, a "rozmiar" jego rozmiar. Nie
+musi to byæ ca³y obszar odwzorowany wywo³aniem mmap().
+
+Funkcja munmap() zwraca 0 je¶li zakoñczy siê pomy¶lnie. W wypadku b³êdu
+zwraca -1 i ustawia odpowiednio zmienn± errno.
+
+Synchronizacja zawarto¶ci odwzorowania z dyskiem
+------------------------------------------------
+Istnieje mo¿liwo¶æ wymuszenia zapisania zmienionych stron z odwzorowywanego
+pliku do pliku. S³u¿y do tego funkcja msync()
+
+int msync(caddr_t adres, size_t rozmiar, int flagi);
+
+Parametr "adres" okre¶la pocz±tek obszaru, który ma zostaæ zapisany, 
+a "rozmiar" jego rozmiar. Nie musi to byæ ca³y obszar odwzorowany 
+wywo³aniem mmap(). 
+Parametr "flagi" okre¶la sposób wykonania synchronizacji i mo¿na w nim podaæ
+nastêpuj±ce flagi:
+MS_ASYNC - zmienione strony zostan± zapisane asynchronicznie, w tle
+MS_SYNC - zmienione strony zostan± zapisane synchronicznie, powrót z funkcji 
+	nast±pi po zapisaniu danych na dysk
+MS_INVALIDATE - powoduje uniewa¿nienie zawarto¶ci innych odwzorowañ tego
+	samego pliku, co spowoduje wczytanie zmienionej zawarto¶ci przy
+	nastêpnym odwo³aniu do tych odwzorowañ
+
+Program przyk³adowy
+-------------------
+W pliku map-cat.c znajduje siê prosty program ilustruj±cy wykorzystanie
+odwzorowania pliku do pamiêci w celu wys³ania jego zawarto¶ci na standardowe
+wyj¶cie.
+
+W katalogu znajduje siê równie¿ program sim-cat.c, który wykonuje to samo
+zadanie za pomoc± read() i write().
+
+Zadanie do samodzielnego wykonania
+----------------------------------
+Porównaæ szybko¶æ dzia³ania map-cat i sim-cat. 
+
+3. Pisanie i czytanie technik± rozrzucania/zbierania 
+----------------------------------------------------
+Technika rozrzucania/zbierania (scatter/gather) polega na u¿yciu w
+czasie jednej operacji wej¶cia/wyj¶cia czê¶ci danych znajduj±cych siê 
+w ró¿nych obszarach pamiêci. 
+
+Przy zapisie, dane s± "zbierane" (gather) z kilku kawa³ków w jedn±
+operacjê zapisu.
+Przy odczycie, odczytane dane s± "rozrzucane" (scatter) do kilku fragmentów 
+pamiêci.
+
+Rozrzucanie/zbieranie pozwala unikaæ kopiowania i zbierania danych w jednym
+buforze przed wykonaniem operacji. Mo¿na na przyk³ad umie¶ciæ nag³ówek
+danych w jednym miejscu, a dane które maj± siê znale¼æ za nag³ówkiem mog±
+znajdowaæ siê w zupe³nie innym buforze (np. gdzie¶, gdzie zosta³y wcze¶niej
+odczytane). 
+
+Do okre¶lania fragmentów pamiêci do operacji zbierania/rozrzucania s³u¿y
+tablica struktur iovec. Jedna struktura iovec okre¶la jeden fragment pamiêci,
+tablica tych struktur opisuje ci±g fragmentów sk³adaj±cych siê na operacjê.
+
+struct iovec {
+    void * iov_base;
+    size_t iov_len;
+}
+
+Pola:
+iov_base - adres pocz±tku fragmentu
+iov_len - d³ugo¶æ fragmentu
+
+Tablica iovec jest wykorzystywana miêdzy innymi w funkcjach readv() i
+writev(), implementuj±cych zapis i odczyt pliku z u¿yciem
+zbierania/rozrzucania.
+
+#include <sys/uio.h>
+int readv (int desk, const struct iovec *wektor, size_t licznik);
+int writev (int desk, const struct iovec *wektor, size_t licznik);
+
+Parametr "desk" okre¶la deskryptor pliku. 
+Parametr "wektor" to wska¼nik na pocz±tek tablicy, a "licznik" jej rozmiar.
+
+Dane zostan± zapisane/odczytane analogicznie jak przy funkcjach read() i
+write(), z t± ró¿nic±, ¿e bufor danych jest nieci±g³y.
+
+W pliku gather.c znajduje siê prosty program przyk³adowy, ilustruj±cy u¿ycie
+techniki zbierania do wypisania tekstu na standardowym wyj¶ciu.
+
+
+
+4. Optymalizacja dzia³ania operacji I/O
+-----------------------------------------------------------
+
+Ustawianie podpowiedzi o sposobie u¿ywania pliku przez mmap
+-----------------------------------------------------------
+Standard POSIX zawiera funkcjê posix_madvise(), która
+umo¿liwia "podpowiedzenie" j±dru w jaki sposób bêdzie dany plik
+u¿ywany, co umo¿liwia wstêpne wczytanie zawarto¶ci pliku (readahead)
+w odpowiedni sposób i w ten sposób mo¿e poprawiæ wydajno¶æ
+programu lub ograniczyæ zu¿ycie pamiêci podrêcznej, co ma wp³yw
+na wydajno¶æ innych programów.
+
+#include <sys/mman.h> 
+int posix_madvise(void *addr, size_t len, int advice); 
+
+addr i len okre¶laj± obszar, którego dotyczy podpowied¼.
+Powinny byæ wyrównane do granicy strony. Wielko¶æ strony
+mo¿na uzyskaæ za pomoc± parametru _SC_PAGESIZE funkcji 
+sysconf().
+
+Mo¿liwe warto¶ci advice:
+POSIX_MADV_NORMAL - domy¶lny sposób traktowania obszaru
+POSIX_MADV_SEQUENTIAL - plik bêdzie czytany w sposób sekwencyjny, mo¿na
+	wczytaæ czê¶æ pliku z przodu i wyrzucaæ strony z ty³u
+POSIX_MADV_RANDOM - plik bêdzie czytany w losowych miejscach, nie ma
+	sensu wczytywaæ stron z wyprzedzeniem
+POSIX_MADV_WILLNEED - ten obszar pliku bêdzie nied³ugo u¿yty, wiêc
+	je¶li to mo¿liwe, nale¿y go wczytaæ
+POSIX_MADV_DONTNEED - ten obszar pliku nie bêdzie w najbli¿szym czasie
+	u¿ywany, wiêc mo¿na go wyrzuciæ
+
+Uwagi:
+- Podpowied¼ nie jest wi±¿±ca dla j±dra.
+- Informacje o implementacji specyficzne dla Linuksa mo¿na 
+  znale¼æ na stronie "man madvise", która opisuje funkcjê madvise(),
+  specyficzn± tylko dla Linuksa (nie do koñca zgodn± ze standardem
+  POSIX).
+
+
+
+Ustawianie podpowiedzi o sposobie u¿ywania pliku
+------------------------------------------------
+Analogicznie do funkcji posix_madvise(), istnieje funkcja podpowiadaj±ca
+sposób u¿ywacia plików za pomoc± operacji read/write i pokrewnych - posix_fadvise.
+
+#include <fcntl.h>
+int posix_fadvise(int fd, off_t offset, off_t len, int advice);
+
+fd - deskryptor pliku, do którego odnosi siê podpowied¼
+offset,len - okre¶laj± obszar pliku, do którego siê odnosi podpowied¼,
+	len=0 oznacza, ¿e do koñca pliku
+
+Warto¶ci advice:
+POSIX_FADV_NORMAL 
+POSIX_FADV_SEQUENTIAL 
+POSIX_FADV_RANDOM 
+POSIX_FADV_WILLNEED 
+POSIX_FADV_DONTNEED 
+ - analogicznie jak w posix_madvise()
+POSIX_FADV_NOREUSE - wczytuje zawarto¶æ pliku dla okre¶lonego obszaru,
+	ale po u¿yciu od razu j± wyrzuca.
+
+Inne zaawansowane funkcje dotycz±ce plików
+------------------------------------------
+W Linuksie dodano kilka funkcji przyspieszaj±cych dzia³anie niektórych
+programów. Nie s± one przeno¶ne, ale umo¿liwiaj± na przyk³ad, szybsze
+dzia³anie serwera HTTP.
+
+#include <sys/sendfile.h> 
+ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
+
+Przesy³a count bajtów pliku in_fd, do gniazda (uwaga, nie mo¿e to byæ plik!),
+out_fd, pocz±wszy od bajtu offset.
+
+long splice(int fd_in, loff_t *off_in, int fd_out, loff_t *off_out,
+                size_t len, unsigned int flags);
+Funkcja systemowa przesy³aj±ca dane bezpo¶rednio z deskryptora
+fd_in do fd_out (jeden z nich musi byæ deskryptorem pipe).
+Dane s± przesy³ane bezpo¶rednio w j±drze, bez bufora w przestrzeni
+u¿ytkownika i bez prze³±czania do trybu u¿ytkownika.
+Dostêpna od wersji j±dra 2.6.17.
+Wiêcej informacji: http://lwn.net/Articles/178199/
+
+long tee(int fdin, int fdout, size_t len, unsigned int flags);
+Funkcja systemowa przesy³aj±ca dane bezpo¶rednio z deskryptora
+fd_in do fd_out (oba musz± byæ deskryptorem pipe).
+Dane s± przesy³ane bezpo¶rednio w j±drze, bez bufora w przestrzeni
+u¿ytkownika i bez prze³±czania do trybu u¿ytkownika.
+Dostêpna od wersji j±dra 2.6.17.
+Wiêcej informacji: http://lwn.net/Articles/179492/
+
+long vmsplice(int fd, void *buffer, size_t len, unsigned int flags);
+Funkcja systemowa przesy³aj±ca dane bezpo¶rednio z przestrzeni
+u¿ytkownika do deskryptora fd (musi byæ deskryptorem pipe).
+Dane s± przesy³ane bezpo¶rednio w j±drze, bez bufora w przestrzeni
+u¿ytkownika i bez prze³±czania do trybu u¿ytkownika.
+Dostêpna od wersji j±dra 2.6.17.
+Wiêcej informacji: http://lwn.net/Articles/181169/
+
+============================================================================
+Autor: Krzysztof Lichota
+Aktualizacja: 14.10.2004
+Sprawdzone: Piotr Stanczyk 21.10.2005
+Sprawdzenie dla j±dra 2.6 i dodanie informacji o posix_madvise(), 
+posix_fadvise(), sendfile(), splice(), tee(), vmsplice(): Krzysztof Lichota 9.1.2007
+Aktualizacja: 06.12.2008 JL
+============================================================================
+

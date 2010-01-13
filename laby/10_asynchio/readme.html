@@ -1,0 +1,311 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html><head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-2">
+<meta name="Author" content="Krzysztof Lichota &lt;lichota@mimuw.edu.pl&gt;">
+<title>Asynchroniczne wejście/wyjście (aio)</title></head>
+<body>
+<h1>Wstęp</h1>
+Asynchroniczne wejście/wyjście (ang. <i>asynchronous I/O</i>) to technika zarządzania
+żądaniami wejścia/wyjścia w oderwaniu od wątk&oacute;w wykonywania.
+
+<p>
+Standardowe operacje wejścia/wyjścia, np. <i>read()</i> i <i>write()</i> powodują
+zablokowanie wątku wykonującego daną operację do czasu jej zakończenia.
+Powoduje to, że wątek może naraz zainicjować tylko jedno żądanie
+wejścia/wyjścia. W przypadku dostępu do zwykłych plik&oacute;w możliwe jest
+zniwelowanie tej wady poprzez zapamiętywanie przez system danych w pamięci
+podręcznej (zapisywanie z op&oacute;źnieniem dla operacji zapisu i czytanie z
+wyprzedzeniem dla operacji odczytu). 
+
+</p><p>
+Są jednak zastosowania, w kt&oacute;rych proces
+chce mieć większą kontrolę nad wykorzystaniem pamięci podręcznej (np.
+bazy danych) lub dostęp do urządzenia nie jest buforowany (tzw. urządzenia
+surowe - ang. <i>raw devices</i>).
+
+</p><p>
+Użycie asynchronicznego wejścia/wyjścia umożliwia zarządzanie przez jeden
+wątek wieloma żądaniami wejścia wyjścia naraz i precyzyjną kontrolę nad
+rozpoczęciem i zakończeniem żądania wejścia/wyjścia.
+
+</p><p>
+Istnieje kilka standard&oacute;w operacji asynchronicznego wejścia/wyjścia. W
+świecie Uniksa obowiązuje standard <b>POSIX.1b</b> i właśnie ten standard będzie
+dalej opisany.
+
+</p><h1>Standard asynchronicznego wejścia/wyjścia POSIX.1b</h1>
+<h2>Żądania wejścia/wyjścia</h2>
+W standardowych operacjach wejścia/wyjścia wszystkie informacje opisujące
+żądanie wejścia/wyjścia zawarte są w parametrach wywoływanej funkcji
+systemowej. Ponieważ operacje asynchronicznego wejścia/wyjścia wykonują się w
+oderwaniu od wątku wykonywania, <u>wszystkie</u> parametry opisujące żądanie są
+zebrane w jednej strukturze <i>aiocb</i>. Wszystkie funkcje asynchronicznego
+wejścia/wyjścia operują właśnie na takich strukturach.
+
+<p>
+Najważniejsze pola struktury aiocb:
+</p><ul>
+	<li><b>int aio_fildes</b> - deskryptor pliku, kt&oacute;rego dotyczy
+	żądanie. 
+	</li><li><b>off_t aio_offset</b> - pozycja w pliku, od kt&oacute;rej ma się
+	rozpocząć operacja. 
+	</li><li><b>size_t aio_nbytes</b> - liczba bajt&oacute;w do
+	odczytania/zapisania.
+	</li><li><b>void *aio_buf</b> - wskaźnik do bufora zawierającego dane do
+	zapisania lub gdzie zostaną umieszczone odczytane dane.
+	</li><li><b>int aio_lio_opcode</b> - operacja, kt&oacute;ra ma zostać wykonana
+	(pole używane tylko w przypadku rozpoczęcia kilku operacji naraz
+	za pomocą funkcji <a href="#lio_listio"><i>lio_listio()</i></a>).
+	</li><li><b>struct sigevent aio_sigevent</b> - struktura określająca
+	spos&oacute;b powiadomienia o zakończeniu żądania (patrz 
+	<a href="#powiadamianie">Powiadamianie o zakończeniu operacji</a>).
+</li></ul>
+
+<h2>Rozpoczęcie operacji transmisji</h2>
+Do rozpoczęcia operacji transmisji można użyć jednej z trzech funkcji:
+<ul>
+	<li><b>aio_read()</b> - rozpoczęcie jednej operacji odczytu.
+	</li><li><b>aio_write()</b> - rozpoczęcie jednej operacji zapisu.
+	</li><li><b>lio_listio()</b> - rozpoczęcie kilku operacji odczytu/zapisu
+	naraz.
+</li></ul>
+
+<h3>int aio_read(struct aiocb *aiocbp)</h3>
+Rozpoczyna operację odczytu opisywaną strukturą <i>aiocbp</i>. Pola
+<i>aio_offset</i> i <i>aio_nbytes</i> określają położenie i długość odczytywanego obszaru.
+Wczytane dane zostaną zapisane w buforze wskazywanym przez <i>aio_buf</i>.
+
+<p>
+Funkcja zwraca 0, jeśli żądanie zostało zarejestrowane. W przeciwnym wypadku
+funkcja zwraca -1 i ustawia odpowiednio zmienną errno.
+
+</p><h3>int aio_write(struct aiocb *aiocbp)</h3>
+Rozpoczyna operację zapisu opisywaną strukturą <i>aiocbp</i>. Pola
+<i>aio_offset</i> i <i>aio_nbytes</i> określają położenie i długość
+zapisywanego obszaru.
+Dane do zapisania znajdują się w buforze określonym przez <i>aio_buf</i>.
+
+<p>
+Funkcja zwraca 0, jeśli żądanie zostało zarejestrowane. W przeciwnym wypadku
+funkcja zwraca -1 i ustawia odpowiednio zmienną errno.
+
+</p><h3><a name="lio_listio">int lio_listio(int mode, struct aiocb *const list[], int nent, struct
+sigevent *sig)</a></h3>
+Rozpoczyna operacje opisywane przez tablicę <i>list</i> wskaźnik&oacute;w do struktur
+aiocb. Liczbę wskaźnik&oacute;w określa parametr <i>nent</i>. Rodzaj operacji do
+wykonania wskazuje pole <i>aio_lio_opcode</i> w każdej ze struktur aiocb
+wskazywanych przez elementy tablicy. Możliwe wartości tego pola to:
+<ul>
+	<li><b>LIO_READ</b> - zostanie wykonana operacja odczytu.
+	</li><li><b>LIO_WRITE</b> - zostanie wykonana operacja zapisu.
+	</li><li><b>LIO_NOP</b> - struktura zostanie zignorowana (brak operacji).
+</li></ul>
+
+<p>Parametr <i>mode</i> określa czy operacja ma się wykonać w spos&oacute;b
+blokujący, czy asynchronicznie. Może przybrać jedną z dw&oacute;ch wartości:
+</p><ul>
+	<li><b>LIO_WAIT</b> - powr&oacute;t z funkcji nastąpi po zakończeniu
+	wszystkich wskazanych operacji (tryb blokujący).
+	</li><li><b>LIO_NOWAIT</b> - powr&oacute;t z funkcji nastąpi po zarejestrowaniu wszystkich
+	operacji (tryb asynchroniczny).
+</li></ul>
+
+<p>
+Parametr <i>sig</i> określa spos&oacute;b powiadamiania, kt&oacute;ry ma zostać użyty do
+powiadomienia o zakończeniu żądań (patrz 
+<a href="#powiadamianie">Powiadamianie o zakończeniu operacji</a>).
+
+</p><p>
+Funkcja zwraca 0, jeśli wszystkie żądania zostały zarejestrowane (lub
+pomyślnie zakończone, jeśli tryb wywołania był blokujący). W przeciwnym wypadku
+funkcja zwraca -1 i ustawia odpowiednio zmienną errno.
+
+</p><h2><a name="powiadamianie">Powiadamianie o zakończeniu operacji</a></h2>
+Spos&oacute;b powiadomienia o zakończeniu operacji wejścia wyjścia określa
+struktura <i>sigevent</i>. Jest ona częścią struktury aiocb opisującej
+żądanie lub zostaje przekazana w wywołaniu funkcji <i>lio_listio()</i>.
+
+<p>
+Spos&oacute;b powiadamiania określa pole <i>sigev_notify</i>. Są następujące
+sposoby powiadamiania:
+</p><ul>
+	<li><b>SIGEV_NONE</b> - brak powiadamiania, stan operacji musi być
+	ręcznie sprawdzany, np. za pomocą funkcji <i>aio_error()</i> lub wątek musi
+	zaczekać na zakończenie operacji za pomocą funkcji
+	<i>aio_suspend()</i>.
+	</li><li><b>SIGEV_SIGNAL</b> - po zakończeniu operacji zostanie wysłany
+	sygnał, numer sygnału określa pole <i>sigev_signo</i>.
+	</li><li><b>SIGEV_THREAD</b> - po zakończeniu operacji wywołana zostanie
+	(w oddzielnym wątku) funkcja, kt&oacute;rej adres znajduje się w polu
+	<i>sigev_notify_function</i>.
+</li></ul>
+
+<h2>Sprawdzanie stanu operacji</h2>
+Stan operacji można sprawdzić wywołując odpowiednią funkcję na jej
+strukturze aiocb.
+
+<h3>int aio_error(const struct aiocb *aiocbp)</h3>
+Sprawdza stan operacji. Może zwr&oacute;cić:
+<ul>
+	<li><b>EINPROGRESS</b> - operacja jeszcze się nie zakończyła.
+	</li><li><b>0</b> - operacja zakończyła się pomyślnie. 
+	</li><li><b>inna wartość</b>	- operacja zakończyła się błędem, zwr&oacute;cona
+	wartość jest analogiczna do wartości errno zwr&oacute;conej w wywołaniu
+	funkcji <i>read()</i> lub <i>write()</i>.
+</li></ul>
+
+<h3>ssize_t aio_return(const struct aiocb *aiocbp)</h3>
+Pozwala sprawdzić liczbę odczytanych/zapisanych bajt&oacute;w. Liczba ta ma
+analogiczne znaczenie jak liczba zwracana przez funkcje <i>read()</i> lub
+<i>write()</i>.
+
+<p>
+Tej funkcji można użyć dopiero kiedy operacja się zakończy. <b>Uwaga!</b> Można ją wywołać
+tylko raz dla każdego zakończonego żądania transmisji.
+
+</p><h2>Oczekiwanie na zakończenie operacji</h2>
+<h3>int aio_suspend(const struct aiocb *const list[], int nent, const struct timespec *timeout)</h3>
+Funkcja ta zawiesza wątek, kt&oacute;ry ją wykona do czasu aż kt&oacute;reś z żądań
+wskazywanych przez wskaźnik w tablicy <i>list</i> nie zostanie zakończone.
+
+<p>
+Pole <i>nent</i> określa liczbę wskaźnik&oacute;w w tablicy. Pole <i>timeout</i>
+określa czas po jakim ma nastąpić powr&oacute;t z funkcji, nawet jeśli żadne z
+żądań nie zostanie zakończone. Jeśli w polu <i>timeout</i> znajduje się NULL,
+oczekiwanie nie będzie przerwane do czasu zakończenia żądania (o ile nie
+zostanie dostarczony sygnał przerywający funkcję systemową).
+
+</p><p>Podanie wskaźnika NULL w polu tablicy <i>list</i> powoduje zignorowanie
+tego pola tablicy.
+
+</p><p>
+Funkcja zwraca 0, jeśli kt&oacute;reś z żądań zostało zakończone. W przeciwnym
+wypadku funkcja zwraca -1 i ustawia odpowiednio zmienną errno.
+
+</p><h2>Dalsze informacje</h2>
+Przedstawione funkcje służą do operowania asynchronicznym wejściem/wyjściem
+w podstawowym zakresie. Do innych użytecznych funkcji należą:
+<ul>
+	<li><b>aio_fsync()</b> - pozwala zaczekać na zakończenie wszystkich
+	operacji związanych z określonym deskryptorem pliku.
+	</li><li><b>aio_cancel()</b> - pozwala anulować żądanie.
+	</li><li><b>aio_init()</b> - pozwala określić parametry implementacji
+	AIO. 
+</li></ul>
+
+<p>
+W strukturze aiocb znajduje się r&oacute;wnież nieom&oacute;wione pole <i>aio_reqprio</i>,
+kt&oacute;re służy do nadawania priorytetu żądaniom wejścia/wyjścia.
+
+</p><p>
+Dalsze szczeg&oacute;łowe informacje o standardzie AIO, dokładny opis parametr&oacute;w i
+wartości zwracanych przez poszczeg&oacute;lne funkcje można znaleźć w 
+<!--A HREF="http://www.gnu.org/manual/glibc-2.2.5/html_node/Asynchronous-I-O.html"-->
+<a href="http://www.gnu.org/software/libc/manual/html_node/Asynchronous-Reads_002fWrites.html#Asynchronous-Reads_002fWrites">
+opisie standardu asynchronicznego wejścia/wyjścia POSIX.1b w bibliotece GLIBC</a>.
+
+</p><h2>Implementacja AIO w Linuksie</h2>
+W celu pełnego korzystania z zalet AIO, jądro systemu musi wspierać
+asynchroniczne żądania wejścia/wyjścia. Jeśli takiego wsparcia nie ma,
+biblioteka GLIBC emuluje asynchroniczne wejście/wyjście za pomocą puli
+wątk&oacute;w wykonujących operacje wejścia/wyjścia. Parametry tej emulacji można
+ustawić za pomocą funkcji <i>aio_init()</i>.
+
+<p>
+Standardowe jądro Linuksa w wersji 2.6.x zawiera obsługę asynchronicznego
+wejścia/wyjścia.</p><p>Dla wersji 2.4.x&nbsp; istnieją łaty dodające takie wsparcie.&nbsp;</p><p><span style="font-style: italic;">Uwaga</span>:
+niekt&oacute;re operacje (np. dopisywanie na końcu pliku) i
+niekt&oacute;re systemy plik&oacute;w, zwłaszcza we wcześniejszych
+wersjach serii 2.6 mogą powodować problemy, np. blokować wykonanie
+programu. W razie wątpliwości, najlepiej zbadać zachowanie programu w
+interesującym nas zastosowaniu.
+
+</p><h2>Szczeg&oacute;ły techniczne</h2>
+W celu korzystania z AIO należy dołączyć plik nagł&oacute;wkowy <b>aio.h</b> i
+łączyć program wykonywalny z biblioteką <b>librt</b>.
+
+<h1>Inne implementacje asynchronicznego wejścia/wyjścia</h1>
+AIO nie jest jedynym ani najlepszym standardem asynchronicznego wejścia/wyjścia.
+Asynchroniczne wejście/wyjście jest np. częścią interfejsu Win32 używanego w
+systemach Windows NT/2000/XP.
+
+<h1>Program przykładowy</h1>
+Załączony program przykładowy <a href="aio-copy.c"><b>aio-copy</b></a> używa interfejsu AIO do
+wykonywania jednocześnie kilku kopii jednego pliku. Wszystkie operacje
+wejścia/wyjścia obsługiwane są przez jeden wątek gł&oacute;wny.
+
+<h2>Zasada działania</h2>
+Stała <b>NUM_ASYNC_IO</b> określa ile może jednocześnie się wykonywać operacji
+odczytu. Z każdym żądaniem odczytu związane jest <b>num_copies</b> (liczba
+kopii) żądań zapisu - po jednym dla każdej kopii. Każde żądanie odczytu i
+jego żądania zapisu stanowią jedną <i>przegr&oacute;dkę</i> (ang. <i>slot</i>),
+niezależną od innych.
+
+<p>Na początku działania programu inicjowany jest odczyt NUM_ASYNC_IO
+pierwszych fragment&oacute;w pliku. Następnie wątek gł&oacute;wny za pomocą funkcji
+<i>aio_suspend()</i> czeka na zakończenie kt&oacute;rejś operacji wejścia/wyjścia.
+
+</p><p>
+Po zakończeniu operacji odczytu rozpoczynane są wszystkie operacje zapisu odczytanych danych
+do plik&oacute;w kopii. 
+
+</p><p>
+Kiedy zakończy się operacja zapisu, sprawdzane jest, czy wszystkie operacje
+zapisu dla danej przegr&oacute;dki się zakończyły. Jeśli tak, przegr&oacute;dka jest znowu
+wolna, więc inicjowany jest odczyt kolejnego fragmentu pliku do tej
+przegr&oacute;dki i cykl rozpoczyna się od nowa.
+
+</p><h2>Przedstawianie stanu żądań</h2>
+Zdefiniowanie makra <i>SHOW_IO_STATUS</i> powoduje przedstawianie stanu żądań w momencie, 
+gdy nastąpi zakończenie kt&oacute;regoś żądania. Stan każdego aktywnego żądania
+jest określony literą:
+<ul>
+	<li><b>W</b> - zakończone żądanie zapisu.
+	</li><li><b>w</b> - żądanie zapisu w trakcie realizacji.
+	</li><li><b>R</b> - zakończone żądanie odczytu
+	</li><li><b>r</b> - żądanie odczytu w trakcie realizacji.
+</li></ul>
+
+<h2>Zadania</h2>
+
+Oto propozycje zadań do samodzielnego wykonania, uporządkowane według
+rosnącej trudności:
+<ol>
+	<li>Po zakończeniu operacji wejścia/wyjścia jest sprawdzane, czy
+	operacja zakończyła się pomyślnie, ale nie jest sprawdzone, czy
+	liczba przeczytanych/zapisanych bajt&oacute;w jest zgodna z tym, co zostało zawarte w
+	żądaniu (liczbę przeczytanych/zapisanych bajt&oacute;w zwraca funkcja
+	<i>aio_return()</i>). Należy dodać obsługę tego przypadku.
+	
+	</li><li>Rozpoczęcie operacji zapisu do wszystkich kopii w przegr&oacute;dce (i
+	początkowe odczytanie fragment&oacute;w pliku do przegr&oacute;dek) jest
+	zrealizowane za pomocą kilku wywołań
+	<i>aio_write()</i> (<i>aio_read()</i>). Należy to zrealizować za
+	pomocą jednego wywołania funkcji <i>lio_listio()</i>.
+	
+	</li><li>Po zakończeniu wszystkich operacji zapisu nie można rozpocząć
+	natychmiast kolejnych operacji zapisu w tej przegr&oacute;dce, ponieważ
+	dane muszą zostać najpierw wczytane do bufora. Efektywniejszym
+	rozwiązaniem jest <b>wczytanie z wyprzedzeniem</b> danych do innego
+	bufora tak, by w momencie zakończenia zapis&oacute;w można było się
+	przełączyć na inny bufor i rozpocząć od razu operacje zapisu.
+	Należy zaimplementować pulę bufor&oacute;w do czytania z wyprzedzeniem. 
+	Pula tych bufor&oacute;w ma być wsp&oacute;lna dla wszystkich przegr&oacute;dek, to
+	znaczy że każda przegr&oacute;dka może wziąć gotowy bufor z puli. Jeśli
+	nie ma wczytanego bufora w puli, należy wczytywać dane do bufora
+	tak, jak to jest zrealizowane obecnie. <u>Uwaga:</u> nie wolno
+	kopiować danych między pulą bufor&oacute;w do wczytywania z wyprzedzeniem a
+	buforami używanymi w przegr&oacute;dkach - ma następować wymiana aktualnie
+	używanego przez przegr&oacute;dkę bufora na bufor z wczytanymi danymi.
+	Można założyć, że rozmiar puli bufor&oacute;w do czytania z wyprzedzeniem
+	jest dany stałą NUM_READAHEAD_BUFFERS.
+	Rozwiązanie zadania znajduje się w pliku <i>aio-copy-readahead.c</i>.</li></ol>
+
+<hr>
+<i>Autor: Krzysztof Lichota <a href="mailto:lichota@mimuw.edu.pl">lichota@mimuw.edu.pl</a>
+   <br>Ostatnio sprawdzone w październiku 2005.<br>
+   Uwagi i komentarze ( w roku akademickim 2005/06 ) proszę kierować 
+   do <a href="mailto:r.bartosiak@mimuw.edu.pl">r.bartosiak@mimuw.edu.pl</a>.<br>Weryfikacja dla jądra 2.6.x, usunięcie sprintf() z przykład&oacute;w: Krzysztof Lichota, 9.01.2007  
+</i>
+
+</body></html>
