@@ -1,18 +1,20 @@
 CC = gcc
 CFLAGS = -Wall
 LFLAGS = -lm
-OBJS = sched.o klient.o
+OBJS = klient.o sched.o queue.o err.o
 EXEC = klient
 
 all: $(EXEC)
 
-klient: klient.o sched.o
+klient: $(OBJS)
 	$(CC) $(LFLAGS) $+ -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 klient.o: sched.h
+
+sched.o: err.h queue.h
 
 clean:
 	rm -f *.o 
