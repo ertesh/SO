@@ -2,9 +2,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include "sched.h"
-#define ILE 13
+#define ILE 3
 
 void fun() {
+    mysched_thread_t id = mysched_self();
+    printf("%s\n", mysched_get_name(id));
+    int limit = 1000000000;
+    int a = 7 + id;
+    int mod = 1009;
+    int i;
+    for (i = 0; i < limit; i++)
+        a = (a * a) % mod;
+    printf("Koniec funkcji %d: %d\n", id, a);
 }
 
 void create_name(char* nazwa, int numer)

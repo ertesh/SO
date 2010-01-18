@@ -10,6 +10,7 @@ struct QueueElement
 
 struct QueueRecord
 {
+    int size;
     struct QueueElement* first;
     struct QueueElement* last;
 };
@@ -22,6 +23,7 @@ void queue_init(Queue* q)
     }
     (*q)->first = NULL;
     (*q)->last = NULL;
+    (*q)->size = 0;
 }
 
 void queue_finalize(Queue q)
@@ -44,6 +46,7 @@ void queue_push(const Queue q, element_t el)
         q->last->next = qe;
     }
     q->last = qe;
+    q->size++;
 }
 
 void queue_pop(const Queue q)
@@ -52,14 +55,23 @@ void queue_pop(const Queue q)
     struct QueueElement* qe = q->first;
     if (qe == NULL) fatal("Empty queue.");
     q->first = qe->next;
+    if (q->last == qe) q->last = NULL;
     free(qe);
+    q->size--;
 }
 
 element_t queue_front(const Queue q) {
+    if (q == NULL) fatal("Uninitialized queue.\n");
     return q->first->el;
 }
 
 int queue_is_empty(const Queue q) {
+    if (q == NULL) fatal("Uninitialized queue.\n");
     return (q->first == NULL);
+}
+
+int queue_size(const Queue q) {
+    if (q == NULL) fatal("Uninitialized queue.\n");
+    return q->size;
 }
 

@@ -29,4 +29,7 @@ element_t queue_front(const Queue);
 /* Returns non zero value if queue is empty, zero otherwise. */
 int queue_is_empty(const Queue);
 
+/* Returns number of elements in the queue */
+int queue_size(const Queue);
+
 #endif
