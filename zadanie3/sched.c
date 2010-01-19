@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <setjmp.h>
 #include <sys/time.h>
+#include <aio.h>
 #include "sched.h"
 #include "queue.h"
 #include "err.h"
@@ -14,17 +15,18 @@ typedef struct thread_struct
     char* name;
     void (*starter)();
     void* mem;
+    struct aiocb* aio;
     jmp_buf jump;
 } thread_data;
 
-static Queue working;
+static Queue working, waiting;
 static thread_data* current;
 static jmp_buf main_loop_jump;
 
 
-/* Timer handling functions */
+/* Signal handling functions */
 
-void timer_handler(int nr)
+void sigprof_handler(int nr)
 {
     switch (setjmp(current->jump)) {
         case -1:
@@ -38,15 +40,61 @@ void timer_handler(int nr)
     }
 }
 
-void prepare_sigprof() {
+void finalize_current()
+{
+    free(current->name);
+    free(current->aio);
+    //free(current->mem);
+    free(current);
+    current = NULL;
+}
+
+void sigusr1_handler(int nr)
+{
+    switch(setjmp(current->jump)) {
+        case -1:
+            syserr("setjump\n");
+            break;
+        case 0:
+            break;
+        default:
+            /* Run given function */
+            current->starter();
+            finalize_current();
+            longjmp(main_loop_jump, 1);
+    }
+}
+
+void sigusr2_handler(int nr)
+{
+    int ile = queue_size(waiting);
+    while (ile) {
+        thread_data* el = (thread_data*) queue_front(waiting);
+        queue_pop(waiting);
+        if (aio_error(el->aio) == 0) {
+            queue_push(working, el);
+            return;
+        } else {
+            queue_push(waiting, el);
+            ile--;
+        }
+    }
+    fatal("SIGUSR2 raised, but no AIO finished\n");
+}
+
+void prepare_signal(int signo, int flags, void(*signal_fun)(int))
+{
     struct sigaction mysignal, oldsignal;
-    mysignal.sa_handler = timer_handler;
+    mysignal.sa_handler = signal_fun;
     if (sigemptyset(&mysignal.sa_mask) == -1)
         syserr("sigemptyset\n");
-    mysignal.sa_flags = 0;
-    if (sigaction(SIGPROF, &mysignal, &oldsignal) == -1)
+    mysignal.sa_flags = flags;
+    if (sigaction(signo, &mysignal, &oldsignal) == -1)
         syserr("sigaction\n");
 }
+
+
+/* Auxiliary functions */
 
 void set_timer()
 {
@@ -67,32 +115,6 @@ void unblock_signal(int nr)
         syserr("sigprocmask\n");
 }
 
-/* Auxiliary functions */
-
-void finalize_current()
-{
-    free(current->name);
-    //free(current->mem);
-    free(current);
-    current = NULL;
-}
-
-void signal_handler(int nr)
-{
-    switch(setjmp(current->jump)) {
-        case -1:
-            syserr("setjump\n");
-            break;
-        case 0:
-            break;
-        default:
-            /* Run given function */
-            current->starter();
-            finalize_current();
-            longjmp(main_loop_jump, 1);
-    }
-}
-
 void create_alternative_stack()
 {
     stack_t mystack, defstack;
@@ -105,16 +127,6 @@ void create_alternative_stack()
     mystack.ss_size = MYSCHED_STACK_SIZE;
     if (sigaltstack(&mystack, &defstack) == -1)
         syserr("sigaltstack\n");
-}
-
-void prepare_sigusr1()
-{
-    struct sigaction mysignal, oldsignal;
-    mysignal.sa_handler = signal_handler;
-    sigemptyset(&mysignal.sa_mask);
-    mysignal.sa_flags = SA_ONSTACK;
-    if (sigaction(SIGUSR1, &mysignal, &oldsignal) == -1)
-        syserr("sigaction\n");
 }
 
 char* copy_string(const char* old_copy)
@@ -131,7 +143,8 @@ char* copy_string(const char* old_copy)
 
 void mysched_init()
 {
-    prepare_sigprof();
+    prepare_signal(SIGPROF, 0, sigprof_handler);
+    prepare_signal(SIGUSR2, 0, sigusr2_handler);
     queue_init(&working);
 }
 
@@ -155,7 +168,7 @@ mysched_thread_t mysched_create_thread(void (*starter)(), const char *name) {
     current->starter = starter;
 
     create_alternative_stack();
-    prepare_sigusr1();
+    prepare_signal(SIGUSR1, SA_ONSTACK, sigusr1_handler);
     raise(SIGUSR1);
     queue_push(working, (void*) current);
     current = NULL;
@@ -163,8 +176,47 @@ mysched_thread_t mysched_create_thread(void (*starter)(), const char *name) {
 	return thread_counter++;
 }
 
-//ssize_t mysched_pwrite(int d, const void *buf, size_t nbytes, off_t offset);
-//ssize_t mysched_pread(int d, void *buf, size_t nbytes, off_t offset);
+void prepare_aio(struct aiocb* aio, int d, void *buf, size_t nbytes, off_t offset)
+{
+    aio = (struct aiocb*) malloc(sizeof(aio));
+    if (aio == NULL)
+        syserr("malloc\n");
+    aio->aio_fildes = d;
+    aio->aio_buf = buf;
+    aio->aio_nbytes = nbytes;
+    aio->aio_offset = offset;
+    aio->aio_sigevent.sigev_notify = SIGEV_SIGNAL;
+    aio->aio_sigevent.sigev_signo = SIGUSR2;
+}
+
+ssize_t common_aio(int (*fun)(struct aiocb*), int d, void *buf, size_t nbytes,
+                   off_t offset)
+{
+   /* Common interface for functions mysched_pwrite and mysched_pread */
+   prepare_aio(current->aio, d, buf, nbytes, offset);
+   fun(current->aio);
+   switch (setjmp(current->jump)) {
+        case -1:
+            syserr("setjump\n");
+        case 0:
+            queue_push(waiting, current);
+            current = NULL;
+            longjmp(main_loop_jump, 1);
+            syserr("longjump\n");
+        default:
+            return aio_return(current->aio);
+    }
+}
+
+ssize_t mysched_pwrite(int d, const void *buf, size_t nbytes, off_t offset)
+{
+    return common_aio(aio_write, d, (void*) buf, nbytes, offset);
+}
+
+ssize_t mysched_pread(int d, void *buf, size_t nbytes, off_t offset)
+{
+    return common_aio(aio_read, d, buf, nbytes, offset);
+}
 
 void mysched_go() {
     if (setjmp(main_loop_jump) == -1)

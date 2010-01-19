@@ -1,13 +1,14 @@
 CC = gcc
 CFLAGS = -Wall
 LFLAGS = -lm
+LIBS = -lrt
 OBJS = klient.o sched.o queue.o err.o
 EXEC = klient
 
 all: $(EXEC)
 
 klient: $(OBJS)
-	$(CC) $(LFLAGS) $+ -o $@
+	$(CC) $(LFLAGS) $(LIBS) $+ -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
