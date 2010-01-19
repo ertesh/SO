@@ -7,7 +7,7 @@
 void fun() {
     mysched_thread_t id = mysched_self();
     printf("%s\n", mysched_get_name(id));
-    int limit = 1000000000;
+    int limit = 100000000;
     int a = 7 + id;
     int mod = 1009;
     int i;
@@ -31,7 +31,6 @@ int main() {
 	for (i = 0; i < ILE; i++) {
 		char nazwa[20];
         create_name(nazwa, i);
-        printf("%s\n", nazwa);
 		watki[i] = mysched_create_thread(fun, nazwa);
 	}
 	mysched_go();
