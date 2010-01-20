@@ -10,7 +10,7 @@
 
 
 /* Test 01 */
-    #define TEST1_DEPTH 35
+    #define TEST1_DEPTH 28
     int test1_fibbonaci(int n)
     {
         struct timeval t;
@@ -50,12 +50,13 @@
         sa.sa_handler = &test1_handler;
         sigaction(SIGINT, &sa, NULL);
         mysched_create_thread(&test1_f1, "Fibbonaci");
-        mysched_create_thread(&test1_f2, "Slow");
+        mysched_create_thread(&test1_f2, "Slow 1");
+//        mysched_create_thread(&test1_f2, "Slow 2");
         mysched_go();
     }
 
 /* Test 02 */
-    #define TEST2_MAX_VAL 10
+    #define TEST2_MAX_VAL 4
     int p_fd[2][2];
 
     void test2_dzialaj(int num)
@@ -73,7 +74,7 @@
 
             if (msg > TEST2_MAX_VAL) msg = -1;
             else msg++;
-
+            if (msg == 0) continue;
             mysched_pwrite(p_fd[1-num][1], &msg, sizeof(int), 0);
             name = mysched_get_name(mysched_self());
             printf("Test2: %s: Wyslano: %d\n", name, msg);
@@ -178,12 +179,12 @@
 int main()
 {
     mysched_init();
+    fprintf(stderr, "Test 02\n");
+    test2();
     fprintf(stderr, "Test 01\n");
     test1();
     fprintf(stderr, "Test 04\n");
     test4();
-    fprintf(stderr, "Test 02\n");
-    test2();
     fprintf(stderr, "Test 03\n");
     test3();
     return 0;
