@@ -2,12 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "sched.h"
-#define ILE 3
+#define ILE 13
 
 void fun() {
     mysched_thread_t id = mysched_self();
     printf("%s\n", mysched_get_name(id));
-    int limit = 100000000;
+    int limit = 10000000;
     int a = 7 + id;
     int mod = 1009;
     int i;
