@@ -160,7 +160,7 @@ mysched_thread_t mysched_create_thread(void (*starter)(), const char *name) {
 	static int thread_counter = 0;
 
     // All info about current thread will be stored in `current`
-    current = malloc(sizeof(thread_data));
+    current = (thread_data*) malloc(sizeof(thread_data));
     if (current == NULL)
         syserr("malloc\n");
     current->id = thread_counter;
@@ -192,6 +192,7 @@ void prepare_aio(struct aiocb* aio, int d, void *buf, size_t nbytes, off_t offse
 ssize_t common_aio(int (*fun)(struct aiocb*), int d, void *buf, size_t nbytes,
                    off_t offset)
 {
+	printf("common_aio\n");
    /* Common interface for functions mysched_pwrite and mysched_pread */
    prepare_aio(current->aio, d, buf, nbytes, offset);
    fun(current->aio);
