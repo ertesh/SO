@@ -1,0 +1,285 @@
+Laboratorium 12
+===============
+Blokowanie plikow.
+------------------
+
+Literatura podstawowa:
+
+1) projekt Linux, podrozdzialy 6.4.1, 6.4.2 oraz 6.4.3 ---
+materialy opracowane przez studentow III roku Wydzialu w ramach przedmiotu
+systemy operacyjne. Sa one dostepne na wydzialowej stronie www w czesci 
+dotyczacej przedmiotu Systemy Operacyjne
+
+2) strony manuala dotyczace funkcji: fcntl i flock                  
+
+Literatura uzupelniajaca:
+
+1) zrodla linuxa, a konkretnie pliki /usr/src/linux/Documentation/locks.txt
+oraz /usr/src/linux/Documentation/mandatory.txt
+2) rozne ksiazki opisujace programowanie systemowe w Unixie i/lub Linuksie
+np.: W.R.Stevens: Programowanie zastoswan sieciowych w systemie Unix albo
+K.Haviland, D.Gray, B.Salama: Unix - Programowanie systemowe, wydawnictwo RM
+(dosc dobry opis)
+
+1. Mechanizm blokowania plikow albo ich czesci.
+===============================================
+
+Klasycznym przykladem ilustrujacym przyczyny wprowadzenia blokad jest
+system rezerwacji miejsc lotniczych. Aby uniknac sprzedania dwoch biletow 
+na to samo miejsce konieczne jest zablokowanie dostepu do pliku (albo jego 
+fragmentu) innym uzytkownikom na czas dokonywania sprawdzenia liczby wolnych
+miejsc i zmiany tej liczby. Ogolnie wszelkie operacje sprawdzenia 
+zawartosci i modyfikacji rekordu w bazie danych wymagaja takiego czy innego
+zablokowania dostepu dla innych uzytkownikow.
+
+Istnieja dwa zasadnicze rodzaje blokad: tak zwane zalecane (advisory) oraz
+obowiazkowe (mandatory). 
+
+*Blokady zalecane* 
+nie maja wplywu na dzialanie funkcji we/wy dla pliku. 
+W szczegolnosci program nie sprawdzajacy jawnie nalozenia blokad 
+moze korzystac z pelnego dostepu do pliku, nawet jesli ktos inny zalozy
+na plik lub jego fragment blokade zalecana.
+
+Istnieja dwa typy takich blokad: POSIX i FLOCK.
+
+Pierwszy, zgodny ze standardem POSIX pozwala na blokowanie 
+poszczegolnych rekordow (fragmentow) pliku. 
+Podstawowym narzedziem ich stosowania jest funkcja fcntl(). 
+
+int fcntl(int fg, int cmd, struct flock *lock)
+
+Do obslugi blokad sluza trzy z wielu mozliwych polecen, ktore ta funkcja
+wykonuje.
+Sa to:
+
+F_GETLK - pobiera opis blokady zawarty w strukturze flock,
+F_SETLK - naklada blokade na plik (albo ja usuwa). W przypadku niemoznosci
+          powrot jest natychmiastowy z bledem EAGAIN,
+F_SETLKW - stosuje blokade, a jesli nie jest to mozliwe usypia.
+
+Struktura flock (zdefiniowana w <fcntl.h>) zawiera  nastepujace pola:
+short l_type;    /* typ blokady - F_ RDLCK blokada do odczytu, F_WRLCK blokada                     do zapisu, F_UNLCK usuniecie */
+short l_whence;  /* typ przesuniecia jak w funkcji lseek - 0 od poczatku, 1 od 
+                    aktualnej pozycji, 2 od konca */
+off_t l_start;   /* przesuniecie w bajtach */
+off_t l_len;     /* wielkosc segmentu w bajtach */
+pid_t l_pid;     /* wlasciciel blokady (zwracany przez F_GETLK) */
+
+Wazniejsze wlasnosci blokad typu POSIX sa nastepujace:
+- zakladane sa na pewien obszar pliku,
+- moga byc typu 'do odczytu', 'do zapisu',
+- zwiazane sa z konkretnym procesem,
+- lista blokad przechowywana jest w i-wezle,
+- blokady 'do odczytu' oraz blokady dotyczace rozlacznych obszarow nie 
+  koliduja ze soba,
+- blokady jednego wlasciciela nie koliduja ze soba,
+- blokada pisania koliduje z innymi, jesli dotycza tego samego obszaru,
+- tylko wlasciciel moze zdjac blokade,
+- nie mozna uspic procesu, jesli powoduje to zastoj,
+- zamkniecie pliku powoduje anulowanie blokad na pliku zalozonych
+  przez proces.
+
+*********************************
+przejrzyj manual funkcji fcntl
+*********************************
+
+Linux udostepnia rowniez funkcje lockf() bedaca nakladka na
+funkcje fcntl() (czyli korzystajaca z niej); funkcja lockf pobiera kolejno:
+deskryptor pliku, polecenie (jak dla fcntl()) oraz rozmiar rekordu do
+zablokowania liczac od wskaznika biezacej pozycji w pliku (tak jak dla
+funkcji lseek()).
+*********************************
+zajrzyj do manuala funkcji lockf
+********************************* 
+
+Sposob wykorzystania funkcji fcntl pokazany jest w pliku przykladowym
+lock-lib.c
+********************************************
+Przestudiuj dokladnie tresc pliku lock-lib.c
+********************************************
+
+
+Drugi typ blokady zalecanej to blokada typu FLOCK umozliwiajaca  
+blokowanie jedynie calych plikow. Operowanie blokadami tego typu 
+umozliwia funkcja systemowa 
+
+int flock(int fd, int operation)
+
+Dopuszczalne operacje to: 
+  LOCK_SH --- naklada blokade do dzielona (do odczytu)
+  LOCK_EX --- naklada blokade wylaczna (do zapisu)
+  LOCK_NB --- w polaczeniu (operacja OR) z powyzszymi operacjami 
+              powoduje, ze flock jest nieblokujaca
+  LOCK_UN --- zdejmuje nalozona blokade.
+
+Blokady te  nie naleza do standardu POSIX (a zatem moga wystapic problemy 
+z przenosnoscia).
+
+Wazniejsze wlasciwosci blokad FLOCK sa nastepujace:
+- zakladane sa na caly plik,
+- zdejmowane sa z calego pliku,
+- moga byc dzielone (shared) albo wylaczne (exclusive),
+- blokowany jest plik (i-wezel) a nie deskryptor,
+- blokady dzielone nie koliduja ze soba,
+- blokada wylaczna koliduje z kazda inna(zarowno wylaczna jak dzielona) 
+dotyczaca tego samego pliku,
+- zalozenie nowej blokady likwiduje stara,
+- zamkniecie pliku nie powoduje usuniecia blokad.
+
+*******************************
+Przeczytaj manual funkcji flock
+*******************************
+
+Sposob wykorzystania funkcji flock() pokazany jest dokladnie w pliku
+przykladowym  flock-lib.c
+
+*********************************************
+Przestudiuj dokladnie tresc pliku flock-lib.c
+*********************************************
+
+*Blokady obowiazkowe* (Na komputerach w labie MOGA NIE DZIALAC!) 
+polegaja na tym, ze system operacyjny bada kazda operacje
+czytania/pisania, aby sprawdzic, czy nie dotyczy ona pliku zajetego przez jakis
+proces. Wlaczenie opcji blokad obowiazkowych modyfikuje dzialanie funkcji
+Read(), write(), open(), creat() i truncate().
+Aby umozliwic blokowanie obowiazkowe pliku musimy wskazac systemowi 
+ten plik jako kandydata do zablokowania. W tym celu musimy zabrac
+prawo wykonania dla grupy i nadac prawo ustanowienia 
+uzytkownika nadac wartosc 1.
+Dalsza procedura zakladania i zdejmowania blokad jest identyczna jak w 
+przypadku blokady zalecanej.
+
+Blokady obowiazkowe maja nastepujace wlasnosci:
+
+- moga byc tylko typu POSIX,
+- blokada 'do czytania' pozwala na czytanie przez inny proces, ale proba 
+zapisu powoduje uspienie piszacego do czasu zdjecia blokady,
+- blokada 'do zapisu' blokuje zarowno czytanie jak i pisanie przez innych
+uzytkownikow (uspienie) do czasu zdjecia blokady,
+- mozliwe jest otwarcie pliku z opcja O_NONBLOCK i wtedy czytanie/pisanie
+zablokowanego pliku powduje zwrocenie bledy EAGAIN,
+- proba nadpisania istniejacego pliku z zalozona blokada powoduje zwrocenie 
+bledu EAGAIN
+
+Ponadto w Linuksie stosowanie blokad obowiazkowych jest mozliwe dla 
+systemow plikow "zamontowanych" z opcja "mand" ( UWAGA !!! standardowo 
+jest "nomand" co moze powodowac trudnosci z uruchomieniem programow) 
+dla plikow oznaczonych jako kandydaci do blokowania i nie zadzialanie
+tego mechanizmu na komputerach w laboratorium.
+
+**************************************************************************
+
+2. Programy przykladowe
+=======================
+W katalogu (po skompilowaniu) znajdziesz nastêpujace programy przykladowe:
+
+a/ no_lock - ilustrujacy sytuacje niestosowania blokad
+b/ f_lock  - ilustrujacy stosowanie blokady FLOCK
+c/ p_lock  - ilustrujacy stosowanie blokady POSIX
+d/ m_lock  - ilustrujacy blokady obowiazkowe
+
+Wszystkie programy wymagaja nazwy pliku jako argumentu. Nalezy uzyc
+pliku umieszczonego w lokalnym systemie plikow (na przyklad w katalogu /tmp), 
+gdyz blokady plikow moga nie zadzialac poprawnie w przypadku systemu plikow
+NFS.
+
+Kazdy z nich dziala wg identycznego schematu:
+- probuje zalozyc blokade do czytania,
+- zaklada blokade i czyta fragment pliku,
+- czeka na 'popchniecie' przez uzytkownika,
+- zwalnia blokade,
+- probuje zalozyc blokad wylaczna do pisania,
+- jesli mu sie udaje, zaklada blokade,
+- prosi o podanie danych i dopisuje je,
+- konczy dzialanie po zezwoleniu przez uzytkownika.
+
+Program no_lock oczywiscie nie zaklada blokad, ale schemat jego dzialania
+jest identyczny.
+
+Aby zaobserwowac dzialanie blokad trzeba oczywiscie uruchomic przynajmniej dwie
+instancje kazdego z programow, z roznych konsoli. 
+
+Warto tez uruchomic no_lock razem, z ktoryms z programow stosujacych blokady.
+W przypadku uruchomienia no_lock z m_lock powinno dac sie zaobserwowac 
+dzialanie blokad obowiazkowych (o ile dzialaja w konfiguracji w labie).
+Uruchomienie go z np. f_lock pokaze z kolei, ze w przypadku blokad zalecanych
+wszyscy musza je stosowac, jesli maja miec sens.
+Warto tez sprawdzic czy blokady zalecane widziane sa jedna przez druga.
+
+
+3. Pliki:
+==========
+
+err.h
+	Plik naglowkowy do biblioteki funkcji obslugi bledow.
+err.c
+	Biblioteka funkcji obslugi bledow.
+lock.c
+	Program glowny, gdy korzystamy z blokowania.
+no-lock.c
+	Program glowny, gdy korzystamy nie z blokowania.
+lock-lib.h
+	Plik naglowkowy (wspolny) biblioteki implementujacej funkcje
+	blokowania. 
+lock-lib.c
+	Biblioteka blokad typu POSIX, korzystajaca z funkcji fcntl();
+	zwroc uwage na kompilacje warunkowa.
+flock-lib.c
+	Biblioteka blokad typu FLOCK, korzystajaca z funkcji flock().
+rw-lib.h
+	Plik naglowkowy biblioteki interakcji z uzytkownikiem i
+	dzialan na pliku.
+rw-lib.c
+	Biblioteka interakcji z uzytkownikiem i dzialan na pliku.
+
+4. Kompilacja
+=============
+Uruchamiamy program make.
+Wart zwrocic uwage na zawartosc pliku Makefile. 
+Porownanie listy programow z lista plikow wskazuje, ze oba programy 
+korzystajace z blokad POSIXowych powstaja z tego samego pliku zrodlowego.
+Jest to mozliwe dzieki zastosowaniu kompilacji warunkowej.
+W pliku lock.c znajduje sie fragment:
+
+#ifdef MANDATORY
+  if (fchmod(desk, S_ISGID | 0666) == -1)
+    syserr("fchmod");
+#endif
+
+Uaktywnianie dyrektywy #ifdef nastepuje poprzez uzycie argumentu -D
+w wierszu wywolania kompilatora.
+
+m_lock.o: lock.c lock-lib.h rw-lib.h err.h
+	$(CC) -DMANDATORY $(CFLAGS) -o m_lock.o lock.c
+
+5. Uwagi
+=========
+1. W przypadku blokad obowiazkowych
+mamy duzy narzut na kazde wykonanie  funkcji we/wy. Korzystanie z
+blokad obowiazkowych jest mozliwe dla systemow plikow "zamontowanych" z
+opcja "mand" ( UWAGA !!! standardowo jest "nomand" co moze powodowac
+trudnosci z uruchomieniem programow) dla plikow oznaczonych jako kandydaci
+do blokowania.
+2. Stosowanie blokad obowiazkowych nie jest polecane ze wzgledu na mozliwosc
+blokad (deadlock), narzuty systemowy oraz nieprzenosnosc.
+3. Sieciowe systemy plikow, takie jak NFS nie przestrzegaja zazwyczaj technik
+blokowania, wiec programy moga dzialac, a moga tez nie dzialac "przez
+siec" - byc moze trzeba bedzie to testowac lokalnie (np. w katalogu /tmp).
+
+
+6. Cwiczenie
+=============
+Jak zauwazyles wszystkie programy przykladowe zakladaja blokady na cale pliki.
+
+Twoim zadaniem jest napisanie programu, ktory bedzie operowal
+na pliku skladajacym sie z bardzo prostych rekordow o stalej 
+dlugosci L. 
+Przez rekord rozumiemy spojny ciag bajtow.  
+Program powinien interakcyjnie umozliwiac czytanie/zapisywanie 
+poszczegolnych rekordow, do ktorych nalezy sie odwolywac podajac ich numer
+(ujemny numer oznacza wyjscie z programu). 
+Manipulujac rekordem nalezy nalozyc na niego POSIXowa
+blokade zalecana (advisory) odpowiednia dla typu operacji (odczyt/zapis).
+Powinna byc ona zdejmowana po wprowadzeniu nowego numeru rekordu.
+
