@@ -1,24 +1,23 @@
 CC = gcc
 CFLAGS = -Wall
 LFLAGS = -lm
-LIBS = -lrt
-OBJS = klient.o sched.o queue.o err.o
-EXEC = klient
+OBJS = sched.o queue.o err.o
+LIBNAME = sched.a
 
-all: $(EXEC)
+all: $(LIBNAME)
 
-klient: $(OBJS)
-	$(CC) $(LFLAGS) $(LIBS) $+ -o $@
+$(LIBNAME): $(OBJS)
+	ar rs $@ $+
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-klient.o: sched.h
-
 sched.o: err.h queue.h
 
+queue.o: err.h
+
 clean:
-	rm -f *.o 
+	rm -f *.o
 	rm -f *~
 	rm -f $(EXEC)
 
