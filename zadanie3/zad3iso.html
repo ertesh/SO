@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="iso8859-2"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="content-type" content= "text/html; charset=iso8859-2"/>
+	<title>Zadanie 3</title>
+</head>
+<body>
+<h1>Zadanie mysched</h1>
+<p>
+Zadanie polega na zaimplementowaniu biblioteki pseudo-wątków w przestrzeni
+użytkownika.  Do dyspozycji są tylko mechanizmy POSIX-owe, oczywiście z
+wyłączeniem pthreads.  Dodatkowo, należy zaimplementować odpowiedniki funkcji
+pread i pwrite, które nie blokują całego procesu a jedynie wołające je
+pseudo-wątki. Wątki powinny być wywłaszczane.
+</p>
+
+<p>
+Program może znajdować się w jednym z dwóch stanów - wykonywania pseudo-wątków
+(dostarczanych przez tę bibliotekę) lub w stanie jednowątkowym. Biblioteka
+powinna dostarczać funckjonalności poprzez API zdefiniowane w pliku
+<a href="sched.h">sched.h</a>.<br/>
+Opis definicji z tego pliku:
+</p>
+<ul>
+	<li><pre>MYSCHED_STACK_SIZE</pre> oznacza rozmiar stosu dla jednego wątku w
+	bajtach.</li>
+	<li><pre>mysched_thread_t</pre> oznacza typ po którym rozróżniane są
+	wątki.</li>
+
+	<li><pre>mysched_init()</pre> funkcja inicjalizująca bibliotekę - użytkownik
+	biblioteki ma obowiązek zawołać tę funkcję przed użyciem pozostałych
+	funkcji. W przeciwnym wypadku dowolne zachowanie jest dopuszczalne.</li>
+
+	<li><pre>mysched_thread_t mysched_create_thread(void (*starter)(), const char *name)</pre>
+	oznacza stworzenie wątku o nazwie name który rozpocznie wykonywanie funkcji
+	przekazanej jako parametr starter. Nazwy nie muszą być unikalne. Zwrócony ma
+	zostać unikalny identyfikator wątku. Przekazywany napis musi istnieć tylko
+	do końca wywołania tej funkcji - nie ma potrzeby alokowania go na stercie.
+	Ta funkcja nie powinna być wołana z pseudo wątków. Jest to jedynie
+	przygotowanie odpowiednich struktur.</li>
+
+	<li><pre>mysched_thread_t mysched_self()</pre> funkcja powinna zwrócić
+	identyfikator wątku z którego jest zawołana. Dopuszczalne jest dowolne
+	zachowanie, gdy zostanie zawołana spoza wątku (np. przed uruchomieniem
+	mysched_go()).</li>
+
+	<li><pre>char * mysched_get_name(mysched_thread_t thread)</pre> ma
+	zwrócić nazwę odpowiedniego wątku podaną podczas jego tworzenia. Użytkownik
+	biblioteki staje się właścicielem pamięci wskazywanej przez zwrócony
+	wskaźnik - na nim spoczywa odpowiedzialność jej zwolnienia.</li>
+
+	<li>
+<pre>
+ssize_t mysched_pwrite(int d, const void *buf, size_t nbytes, off_t offset)
+ssize_t mysched_pread(int d, void *buf, size_t nbytes, off_t offset);
+</pre>
+	mają symulować wywołania systemowe pwrite i pread. Poniżej opisana jest
+	sugerowana implementacja. Nie należy używać tutaj zwykłych pread/pwrite,
+	ponieważ one blokują cały proces a nie tylko wołający pseudo-wątek.</li>
+
+	<li><pre>void mysched_go()</pre> ta funkcja powinna zostać zawołana po
+	utworzeniu wątku/wątków. Nie powinna być wołana z pseudo-wątków. Jej
+	zawołanie powinno rozpocząć wykonywanie wątków. Funkcja powinna wrócić gdy
+	wszystkie wątki zakończą się. Jeżeli po jej zawołaniu zostaną stworzone nowe
+	wątki a ona zostana zawołana ponownie, to również powinno to zadziałać
+	prawidłowo.</li>
+</ul>
+<p>Inne uwagi dotyczące funkcjonalności</p>
+<ul>
+	<li>Wątek kończy się, gdy zostanie opuszczona funkcja przekazana do 
+	mysched_create_thread().</li>
+	<li>Powinna działać domyślna obsługa sygnałów SIGQUIT i SIGINT</li>
+	<li>Zakładamy, że użytkownik nie będzie używał sygnałów SIGUSR1, SIGUSR2,
+	SIGPROF i nie będzie korzystał z funkcjonalności pthreads.</li>
+	<li>Zachowanie przy forku i execu może być dowolne.</li>
+</ul>
+<p>Uwagi dotyczące implementacji</p>
+<ul>
+	<li>Nie należy używać pthreads</li>
+	<li>Należy używać tylko mechanizmów POSIX-owych. setcontext i getcontext
+	uznajemy za nienależące do POSIX, ponieważ zostały usunięte z najnowszej
+	jego wersji</li>
+	<li>Zadanie powinno działać zarówno na 32 jak i 64 bitach i w miarę
+	możliwości nie zakładać nic o architekturze i systemie operacyjnym.</li>
+	<li>Należy dostarczyć pliki z kodem w C oraz Makefile do skompilowania ich
+	do statycznej biblioteki o nazwie sched.a implementującej plik nagłówkowy z
+	zadania (należy użyć narzędzia ar(1) do spakowania plików *.o - tutoriale w
+	google).</li>
+	<li>Strategia przełączania wątków może być dowolna o ile będzie fair
+	wobec wszystkich wątków - np. round-robin.</li>
+	<li>Ustalamy, że sygnałem do tworzenia nowego wątku będzie SIGUSR1, sygnałem
+	o zakończeniu AIO - SIGUSR2, a sygnałem od timera SIGPROF. (opisane
+	poniżej)</li>
+</ul>
+<h2>Wskazówki</h2>
+<h3>setjmp i longjmp</h3>
+<p>
+Prostą i przenośną metodą na przełączanie kontekstu są funkcje setjmp(3) i
+longjmp(3). Dokładny opis znajduje się w manach, tutaj jest skrócony.
+</p>
+<p>
+Funkcje te służa do zachowywania i odtwarzania stanu programu. Przez stan
+rozumiane są rejestry (w tym czubek stosu) i maska sygnałów. Stan zachowywany
+jest w zmiennej typu jmp_buf, która jest przekazywana do obu tych funkcji.
+Sygnatury są następujące:
+</p>
+<pre>
+int setjmp(jmp_buf env);
+void longjmp(jmp_buf env, int val);
+</pre>
+<p>
+Zawołanie setjmp spowoduje zapisanie stanu programu do env. Zwrócona zostanie
+wartość 0. Gdy później w programie zostanie zawołane longjmp z tym samym env i
+wartością val, to stan programu zostanie przywrócony do momentu w którym zostało
+zawołane setjmp - czyli z perspektywy programisty będzie to wyglądało tak jakby
+zakończyło się wykonanie odpowiedniej funkcji setjmp. Aby odróżnić sytuację
+zawołania setjmp po raz pierwszy i powrotu do niego na skutek longjmp, setjmp
+zwróci val przekazane w longjmp jeżeli będzie to powrót i 0 gdy będzie to
+wywołanie funkcji setjmp.
+</p>
+<p>
+Niestety ten mechanizm jest dość prymitywny i sprowadza się do zapamiętania
+rejestrów i maski sygnałów, czyli w szczególności nie kopiuje stosu. To jest
+przyczyna, dla której funkcja, która wywołała setjmp nie może zostać opuszczona
+jeżeli w przyszłości ma nastąpić wywołanie odpowiedniego longjmp. Gdyby tak się
+stało, to na szczycie stosu byłyby śmieci. Widać, że to nie wystarcza, aby
+dostarczyć funkcjonalności wątków.
+</p>
+<h3>Nowy stos</h3>
+<p>
+Aby mieć funkcjonalność wątków, należy każdemu przydzielić osobny stos. Niestety
+POSIX nie daje możliwości definiowania nowych stosów jawnie, więc trzeba
+zastosować hakerską sztuczkę: użyć alternatywnego stosu do obsługi sygnałów do
+definiowania nowych stosów dla wątków.
+Scenariusz postępowania jest następujący:
+</p>
+<ul>
+	<li>Zaalokować na stercie kawałek miejsca, który będzie stosem wątku</li>
+	<li>Za pomocą sigaltstack(2) zażyczyć sobie, aby to miejse było
+	alternatywnym stosem dla wywołania funkcji obsługi sygnałów</li>
+	<li>Za pomocą sigaction(2) zarejestrować się na ustalony sygnał podając
+	flagę SA_ONSTACK</li>
+	<li>Za pomocą raise(3) wysłać do siebie tenże ustalony sygnał</li>
+	<li>W procedurze obsługi sygnału trzbea zawołać setjmp i powrócić z funkcji
+	obsługi sygnału</li>
+</ul>
+<p>
+W ten sposób zostanie zapisany stan wskazujący na inny stos, więc spokojnie
+można użyć longjmp do tego stanu w dowolnym momencie. Należy tylko zastanowić
+się, co i kiedy zrobić z maską sygnałów. To jest sposób na utworzenie nowego
+wątku.
+</p>
+<h3>Wywłaszczanie</h3>
+<p>
+Do przerywania pracy procesu świetnie nadają się sygnały, dlatego można
+wykorzystać je do wywłaszczania wątków i przełączania kontekstu na inny wątek i
+w ten sposób otrzymać współbieżność. Można do tego użyć setitimer(2), który
+rozkazuje systemowi operacyjnemu dostarczać sygnał do procesu raz na ustalony
+czas. Udostępnia on trzy typy timerów, które mierzą czas na różne sposoby:
+rzeczywisty, faktyczny czas spędzony przez proces w przestrzeni użytkownika oraz
+czas spędzony zarówno w przestrzeni użytkownika jak i czas który jądro spędziło
+na żądaniach procesu. Należy użyć tego trzeciego.
+</p>
+<h3>Wejście / wyjście</h3>
+<p>
+Jeżeli chcemy dostarczyć odpowiedników funkcji pread/pwrite które będą blokować
+tylko wołający je wątek, to nie możemy użyć pwrite/pread, bo zablokowany
+zostanie cały proces. Aby tego uniknąć można posłużyć się POSIX AIO, które nie
+blokuje procesu i zażyczyć sobie powiadomienia o zakończeniu operacji poprzez
+sygnał. Do czasu nadejścia takiego powiadomienia należy wykonywać tylko wątki
+które nie czekają na AIO. Jeżeli takich nie ma, należy użyć aio_suspend(3), aby
+uniknąć aktywnego oczekiwania. Gdy nadejdzie sygnał mówiący o zakończeniu
+działania wątku, trzeba sprawdzić którego wątku była to operacja (za pomocą
+aio_error(3)) i oznaczyć ten wątek jako wątek gotowy do wykonania.
+</p>
+<hr/>
+<p>
+<small>Autor: <i>Marek Dopiera &lt; dopiera (at) mimuw (dot) edu (dot) pl &gt;</i></small>
+</p>
+</body>
+</html>
+

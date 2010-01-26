@@ -1,0 +1,185 @@
+
+<!-- saved from url=(0047)http://www.mimuw.edu.pl/~mengel/SO/zad1iso.html -->
+<HTML><HEAD><META http-equiv="Content-Type" content="text/html; charset=ISO-8859-2">
+<TITLE>Zadanie zaliczeniowe 1</TITLE>
+
+</HEAD><BODY>
+
+<H1> ZADANIE ZALICZENIOWE NR 1</H1>
+
+<P>
+Należy stworzyć pierścień składający się z N+1 procesów, które
+będą realizować generowanie słowa należącego do języka  zadanego
+gramatyką bezkontekstową. 
+
+
+</P><P>
+
+Np. dla poniższej gramatyki (pierwszy znak oznacza nieterminal po lewej stronie
+produkcji, pozostałe napis po prawej stronie produkcji):
+
+
+</P><P>
+AaBb
+<BR>
+BaCb
+<BR>
+Co
+
+</P><P>
+
+dla symbolu początkowego A dostaniemy słowo: aaobb
+</P><P>
+dla symbolu poczatkowego B dostaniemy słowo: aob
+</P><P>
+dla symbolu początkowego C dostaniemy słowo: o
+
+    
+</P><P>
+Rozwiązane powinno zawierać dwa programy: zarządcę i wykonawcę.
+</P><P>
+Użytkownik uruchamia program zarządcy z trzema parametrami określającymi: liczbę
+wykonawców (N), nazwę pliku zawierającego daną gramatykę oraz jej
+	symbol początkowy. 
+</P><P>
+Zarządca tworzy pierścień wykonawców
+	przekazując każdemu z nich przez linię poleceń nazwę pliku
+	zawierającego gramatykę 
+	oraz inicjuje proces 
+	generowania  przez wysłanie do najbliższego sąsiada (patrz:
+	schemat komunikacji) symbolu
+	początkowego  gramatyki. 
+</P><P>
+Zarządca kończy pracę po zakończeniu
+	działania wykonawców.
+
+
+</P><H2>GENEROWANIE SŁÓW</H2>
+
+<P>
+Każdy z wykonawców realizuje jeden krok procesu generowania.
+Polega on na odnalezieniu w otrzymanym od poprzedniego procesu napisie pierwszego z lewej symbolu
+nieterminalnego, wybraniu pierwszej produkcji zawierającej
+po lewej stronie odnaleziony symbol, zastąpieniu go prawą stroną
+produkcji i odesłaniu uzyskanego w ten sposób napisu do kolejnego
+	  sąsiada. 
+</P><P>
+Przed odesłaniem napisu wykonawca powinien wypisać na standardowym strumieniu
+	  diagnostycznym, w nowym wierszu,
+	  swój pid oraz odsyłany dalej napis.
+</P><P>
+W sytuacji gdy w otrzymanym ciągu nie występuje już żaden symbol
+	  nieterminalny (generowanie zostało zakończone) wykonawca
+	  przekazuje dalej umówiony znacznik, natomiast na strumieniu
+	  diagnostycznym wypisuje komunikat o zakończeniu generowania.
+</P><P>
+Zarządca, w przypadku otrzymania od swego sąsiada napisu, który nie
+	      jest wyróżnionym znacznikiem, działa tak jak każdy z
+	      wykonawców. 
+
+
+</P><H2>GRAMATYKA I JEJ REPREZENTACJA</H2>
+
+<P>
+Alfabetem języka są wielkie i małe litery alfabetu łacińskiego. Litery
+	      wielkie odpowiadają symbolom nieterminalnym, litery małe
+	      symbolom terminalnym.
+</P><P>
+Gramatyka zapisana jest w pliku tekstowym w taki sposób, że każdy
+	    wiersz z wyjątkiem ostatniego odpowiada jednej
+	    produkcji. Ostatni wiersz jest pusty. 
+</P><P>
+Produkcje zapisywane są jako
+<B>ciąg elementów alfabetu</B>.
+
+Pierwszy z symboli takiego ciągu stanowi lewą stronę produkcji. 
+
+
+
+</P><H2>SCHEMAT KOMUNIKACJI I ZWIJANIE PIERŚCIENIA</H2>
+
+
+Każdy z procesów tworzących pierścień połączony jest dwoma łączami
+		    nienazwanymi ze swoimi sąsiadami. 
+Łącza te powinny używać standardowych deskryptorów wyjściowych i
+		    wejściowych.
+Zapis do łącza powinien odbywać się za pomocą standardowego
+deskryptora wyjściowego,
+a odczyt - za pomocą standardowe deskryptora wejściowego.
+
+
+<P>
+Komunikacja odbywa się jednokierunkowo.
+</P><P>
+Proces zarządcy, po uruchomieniu i wczytaniu parametrów
+		    wywołania, tworzy pierścień wykonawców
+		    przekazując każdemu z nich nazwę pliku
+		    zawierającego gramatykę (jest to jedyny
+		    argument przekazywany przez parametry wywołania)
+		    oraz inicjuje przetwarzanie wysyłając do swego
+		    bezpośredniego sąsiada symbol początkowy gramatyki.
+</P><P>
+Po otrzymaniu znacznika informującego o zakończeniu generowania słowa,
+			  proces zarządcy przekazuje swojemu sąsiadowi
+			  znacznik końca działania. 
+</P><P>
+Po otrzymaniu	takiego znacznika proces wykonawcy 
+			  przekazuje go dalej a następnie wypisuje na
+			  wyjściu diagnostycznym komunikat o
+			  zakończeniu działania i kończy
+			  pracę. W chwili odebrania tego znacznika
+			  przez zarządcę powinien on zaczekać na
+			  zakończenie działania wszystkich wykonawców
+			  i zakończyć pracę, wypisując stosowny komunikat.
+
+
+</P><H2>POZOSTAŁE INFORMACJE</H2>
+
+<P>Rozwiązania (tylko Makefile, pliki źródłowe i opcjonalny plik z opisem)
+należy nadsyłać na adres solab@mimuw.edu.pl za pomoca skryptu 
+<A href="http://www.mimuw.edu.pl/~mengel/SO/PUBLIC-SO/submit/submit">submit</A>. Rozwiazania przeslane w inny
+sposob nie beda sprawdzane.
+
+</P><P>
+Ostateczny termin nadsyłania rozwiązań: 9 listopada 2009, 23:59</P>
+
+<P>W przypadku wątpliwości można zadać pytanie autorowi zadania
+<A href="mailto: janowska@mimuw.edu.pl">Agacie Janowskiej</A><A></A></P><A>
+
+<P>
+Można skorzystać z funkcji: strncpy, strncmp, strncat z biblioteki string.h
+oraz z funkcji: fopen, fgets, fclose do manipulowania plikami.
+
+</P><P>
+</P><P>
+Należy pamiętać o zamykaniu wszystkich nieużywanych deskryptorów.
+
+
+</P><H2>UZUPEŁNIENIA</H2>
+<OL>
+<LI>
+Można założyć, że wejście jest zgodne z opisaną w treści składnią.
+</LI>
+<LI>
+Można przyjąć, że gramatyka generuje wyłacznie słowa skończone.
+</LI><LI>
+Można założyć, że gramatyka jest zdefiniowana poprawnie, nie zawiera
+		    reguł z lewostronną rekursją, i  że jest niewielka
+		    - liczy nie więcej niż 10 reguł oraz prawe strony
+		    reguł mają nie więcej niż 10 symboli.
+</LI>
+<LI>
+Dopuszczalne jest użycie jednego znacznika sygnalizujacego koniec
+					  generowania i koniec pracy.
+</LI>
+<LI>
+Można przyjąć, ze wszystkie generowane słowa zmieszczą się w łączu.
+</LI>
+<LI>
+Nie należy wykonywać wyrafinowanej obsługi błędu - wystarczy, że
+błąd w funkcji systemowej zakończy proces ze stosownym komunikatem.
+
+</LI></OL>
+
+
+</A></BODY></HTML>

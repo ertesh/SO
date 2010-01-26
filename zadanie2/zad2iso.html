@@ -1,0 +1,142 @@
+
+<!-- saved from url=(0047)http://www.mimuw.edu.pl/~mengel/SO/zad2iso.html -->
+<HTML><HEAD><META http-equiv="Content-Type" content="text/html; charset=ISO-8859-2">
+<TITLE>SO - Zadanie zaliczeniowe 2</TITLE>
+
+</HEAD><BODY>
+
+<H1>ZADANIE ZALICZENIOWE NR 2</H1>
+
+<P>
+Należy napisać w C serwer wielowątkowy wykonujący zlecone operacje na grafie, a także prosty program kliencki wysyłający i odbierający zlecenia.
+
+</P><H2>Klient</H2>
+
+<P>
+Klient powinien uruchamiać się poleceniem<BR>
+<KBD>./klient <VAR>polecenie</VAR> <VAR>argumenty...</VAR></KBD><BR>
+gdzie <VAR>polecenie</VAR> jest pojedynczym znakiem informującym o rodzaju polecenia, a <VAR>argumenty</VAR> są liczbami całkowitymi dodatnimi (mieszczącymi się w typie <CODE>int</CODE>), których liczba i znaczenie zależy od polecenia.
+
+</P><P>
+Program wysyła polecenie opisane w argumentach do serwera, po wykonaniu polecenia przez serwer odbiera odpowiedź i w zależności od odpowiedzi kończy się z odpowiednim statusem. W przypadku niektórych poleceń wypisuje także komunikat na standardowe wyjście.
+
+</P><H2>Serwer i wątki</H2>
+<P>
+Serwer powinien uruchamiać się poleceniem<BR>
+<KBD>./serwer <VAR>N</VAR> <VAR>X</VAR> <VAR>T</VAR></KBD>
+</P><P>
+Można założyć, że parametry są poprawne. Parametry są liczbami całkowitymi i oznaczają:
+</P><DL>
+<DT><VAR>N</VAR>
+</DT><DD>liczbę wierzchołków grafu, 1&lt;=<VAR>N</VAR>&lt;=50
+</DD><DT><VAR>X</VAR>
+</DT><DD>maksymalną liczbę wątków działających jednocześnie, 1&lt;=<VAR>X</VAR>&lt;=50
+</DD><DT><VAR>T</VAR>
+</DT><DD>maksymalny czas oczekiwania w puli bezczynnych wątków, w sekundach, zero oznacza brak oczekiwania (pula zawsze pusta), 0&lt;=<VAR>T</VAR>&lt;=60
+</DD></DL>
+
+<P>
+Serwer powinien w pętli odbierać komunikaty ze zleceniami od klientów i inicjować wykonanie zleceń przez wątki. Do obsługi zlecenia powinien być użyty wolny wątek z puli bezczynnych wątków, a jeśli takiego nie ma i nie osiągnięto jeszcze <VAR>N</VAR> wątków, powinien zostać utworzony nowy wątek. Jeśli działa <VAR>N</VAR> wątków, wówczas kolejne zlecenie zostanie obsłużone dopiero po zwolnieniu jednego z wątków.
+
+</P><P>
+Wątek realizuje zadane zlecenie i (bez pośrednictwa głównego wątku serwera) wysyła odpowiedź do klienta. Po zrealizowaniu zlecenia wątek powinien zająć się obsługą kolejnego nieobsłużonego zlecenia. Jeśli nie ma kolejnego zlecenia do realizacji, wątek trafia do puli i oczekuje na zlecenie maksymalnie <VAR>T</VAR> sekund; jeśli w tym czasie nie zostanie wykorzystany do obsługi zlecenia, wątek kończy się.
+
+</P><P>
+Gdy serwer otrzyma jeden z sygnałów <CODE>SIGINT</CODE>, <CODE>SIGHUP</CODE>, <CODE>SIGTERM</CODE> powinien poczekać na zakończenie wykonywania bieżących zleceń przez wątki, a następnie po odczekaniu 1 sekundy, zakończyć się, zwalniając zasoby.
+
+</P><H2>Graf i operacje</H2>
+<P>
+Serwer wykonuje operacje na grafie skierowanym o <VAR>N</VAR> wierzchołkach numerowanych od <VAR>0</VAR> do <VAR>N-1</VAR>. Krawędzie posiadają wagi, które są liczbami całkowitymi z przedziału <VAR>[1,&nbsp;99]</VAR>. Początkowo graf nie posiada żadnej krawędzi.
+</P><P>
+Graf można (ale nie jest to wymaganie) reprezentować jako tablicę <VAR>N</VAR>*<VAR>N</VAR> o wartościach równych wagom lub 0 w przypadku braku krawędzi.
+
+</P><P>
+Operacje:
+</P><DL>
+<DT>dodanie krawędzi
+</DT><DD>
+<P>
+Parametry klienta:<BR>
+<CODE>+ <VAR>V</VAR> <VAR>W</VAR> <VAR>G</VAR></CODE><BR>
+gdzie <VAR>V</VAR> i <VAR>W</VAR> to numery wierzchołków
+
+</P><P>
+Powoduje dodanie krawędzi skierowanej z <VAR>V</VAR> do <VAR>W</VAR> o wadze <VAR>G</VAR> lub ustawia wagę jeśli taka krawędź już istnieje.
+
+</P><P>
+Klient powinien zwrócić kod zakończenia 0 w przypadku dodania krawędzi, 1 w przypadku gdy krawędź już istniała (niezależnie od tego czy waga uległa zmianie), -1 w przypadku błędu (np. numer wierzchołka poza zakresem).
+
+</P></DD><DT>usunięcie krawędzi
+</DT><DD>
+<P>
+Parametry klienta:<BR>
+<CODE>- <VAR>V</VAR> <VAR>W</VAR></CODE>
+</P><P>
+Powoduje usunięcie krawędzi skierowanej z <VAR>V</VAR> do <VAR>W</VAR>.
+Jeśli takiej krawędzi nie ma, nic nie zmienia.
+
+</P><P>
+Klient powinien zwrócić kod zakończenia 0 w przypadku usunięcia krawędzi, 1 w przypadku gdy krawędź nie istniała, -1 w przypadku błędu (np. numer wierzchołka poza zakresem).
+
+</P></DD><DT>znalezienie cyklu Hamiltona
+</DT><DD>
+<P>
+Parametry klienta:<BR>
+<CODE>H <VAR>W<SUB>1</SUB></VAR> <VAR>W<SUB>2</SUB></VAR> ... <VAR>W<SUB>m</SUB></VAR></CODE><BR>
+Można założyć, że <VAR>m&lt;=50</VAR> oraz że wierzchołki się nie powtarzają.
+</P><P>
+Powoduje wyszukanie cyklu Hamiltona o minimalnej wadze w podgrafie złożonym z wierzchołków <VAR>W<SUB>1</SUB></VAR> ... <VAR>W<SUB>m</SUB></VAR>, o ile taki cykl istnieje. Można użyć naiwnego algorytmu wyszukiwania.
+</P><P>
+Na wyjściu klienta pojawia się informacja opisana przez wiersz:<BR>
+<CODE>H <VAR>waga</VAR></CODE><BR>
+gdzie <VAR>waga</VAR> to <CODE>0</CODE> w przypadku braku cyklu Hamiltona, waga znalezionego cyklu w przypadku jego znalezienia, <CODE>-1</CODE> w przypadku błędu (np. numer wierzchołka poza zakresem).<BR>
+</P><P>
+Status zwracany przez klienta: 0 w przypadku znalezienia cyklu, 1 w przypadku braku cyklu, -1 w przypadku błędu.
+</P></DD></DL>
+
+<H2>Komunikacja i synchronizacja</H2>
+<P>
+Klienty komunikują się z serwerem i jego wątkami przez kolejkę/kolejki IPC. Do realizacji wątków należy użyć biblioteki <CODE>pthread</CODE>.
+
+</P><P>
+Wątki serwera operują na wspólnych strukturach danych, synchronizując dostęp za pomocą mutexów i zmiennych warunkowych. Dostęp do grafu ma być chroniony na zasadzie czytelników i pisarzy na poziomie pojedynczych wierzchołków. Rozmiar struktur danych służących synchronizacji może być <VAR>O(N)</VAR>.
+
+</P><H2>Pozostałe informacje</H2>
+
+<P>Na standardowe wyjście mogą być wypisywane jedynie komunikaty opisane w treści. Inne komunikaty (o błędach, diagnostyczne - oby jak najmniej) powinny być wypisywane na <CODE>stderr</CODE>.
+
+</P><P>Rozwiązania w języku C (tylko Makefile, pliki źródłowe i opcjonalny plik z opisem)
+należy nadsyłać na adres solab@mimuw.edu.pl ze swoich kont pocztowych 
+na komputerze students za pomocą skryptu 
+<A href="http://www.mimuw.edu.pl/~mengel/SO/PUBLIC-SO/submit/submit">submit</A>. Rozwiązania przesłane w inny
+sposób nie bedą sprawdzane. W plikach źródłowych musi znaleźć się komentarz 
+z imieniem i nazwiskiemi autora.
+
+</P><P>
+Ostateczny termin nadsyłania rozwiązań: 7 grudnia 2009, 23:59</P>
+
+<P>W przypadku wątpliwości można zadać pytanie autorowi zadania
+<A href="mailto:czarnik@mimuw.edu.pl">Patrykowi Czarnikowi</A><A></A></P><A>
+
+
+<H2>Uzupełnienia</H2>
+<OL>
+<LI>Dopuszczalne jest czytanie zleceń z kolejki bezpośrednio przez wątki "robocze" i utrzymywanie przy życiu jednego wątku nawet przy braku zleceń.
+</LI><LI>Można użyć mechanizmu pthread_rwlock.
+
+</LI><LI>Argumenty klienta i serwera są poprawne składniowo, ale należy sprawdzać (i powinien to robić dopiero serwer) czy numer wierzchołka jest mniejszy od <VAR>N</VAR>.
+
+</LI><LI>Kolejka/i IPC może być publiczna i dowolnie (np. poprzez stałą w kodzie) można ustalać wspólny klucz dla serwera i klienta.
+
+</LI><LI><VAR>X</VAR> to liczba wątków "roboczych", a poza nimi jest główny wątek serwera.
+
+</LI><LI>Kolejność wybierania wątków z puli może być dowolna.
+
+</LI><LI>"Naiwny algorytm" to taki, który sprawdza wszystkie możliwości i wybiera najlepszą. Tak, to może trwać długo.
+
+</LI><LI>Struktury danych o rozmiarze zależnym od <VAR>N</VAR> powinny być alokowane dynamicznie na podstawie wartości argumentu <VAR>N</VAR>, a nie statycznie dla rozmiaru 50.
+
+</LI></OL>
+
+
+</A></BODY></HTML>
